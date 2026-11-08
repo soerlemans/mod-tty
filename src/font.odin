@@ -39,6 +39,7 @@ get_system_font :: proc() -> ^ttf.Font {
             // Load at a crisp terminal size (e.g., 14.0 or 16.0 point font)
             cached_font = ttf.OpenFont(c_path, 15.0)
             if cached_font != nil {
+                ttf.SetFontHinting(cached_font, .LIGHT)
                 break
             }
         }

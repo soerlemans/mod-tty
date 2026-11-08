@@ -57,7 +57,7 @@ render_string :: proc(renderer: ^sdl.Renderer, text: string, col, row: f32, colo
 
 
 main :: proc() {
-	// 1. Initialize Janet VM via our module
+	// Initialize Janet VM via our module.
 	janet.janet_init()
 	defer janet.janet_deinit()
 
@@ -65,7 +65,7 @@ main :: proc() {
 	config := load_app_config(env, "init.janet")
 	fmt.println("Loaded config from Janet module successfully!")
 
-	// 2. Initialize SDL3
+	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
 		fmt.println("Failed to initialize SDL3:", sdl.GetError())
 		return
@@ -83,9 +83,17 @@ main :: proc() {
 	_ = sdl.StartTextInput(window)
 	defer _ = sdl.StopTextInput(window)
 
+	// Create renderer for the window.
 	renderer := sdl.CreateRenderer(window, nil)
 	if renderer == nil do return
 	defer sdl.DestroyRenderer(renderer)
+	
+	// Create a text engine tied to your SDL renderer
+	text_engine := ttf.CreateRendererTextEngine(renderer)
+	if text_engine == nil {
+    	fmt.eprintln("Failed to create text engine:", sdl.GetError())
+	}
+	defer ttf.DestroyRendererTextEngine(text_engine)
 
 	input_buffer: [128]u8
 	input_len: int = 0
