@@ -3,9 +3,11 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:c"
+import "core:strings"
 
 import sdl "vendor:sdl3"
-import "janet"
+import ttf "vendor:sdl3/ttf"
+import janet "janet"
 
 App_Config :: struct {
 	title:         cstring,
@@ -19,15 +21,40 @@ App_Config :: struct {
 FONT_W :: 8
 FONT_H :: 16
 
-FONT_BITMAP := [128][16]u8{
-	'A' = {0x00, 0x00, 0x18, 0x3C, 0x66, 0x66, 0x7E, 0x66, 0x66, 0x66, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	'B' = {0x00, 0x00, 0x7C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x7C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	'C' = {0x00, 0x00, 0x3C, 0x66, 0x60, 0x60, 0x60, 0x66, 0x3C, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	'D' = {0x00, 0x00, 0x78, 0x6C, 0x66, 0x66, 0x66, 0x6C, 0x78, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	'>' = {0x00, 0x00, 0x60, 0x30, 0x18, 0x0C, 0x18, 0x30, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	':' = {0x00, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x18, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-	' ' = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+render_text_string :: proc(renderer: ^sdl.Renderer, text: string, x, y: f32, color: sdl.Color) {
+    font := get_system_font()
+    if font == nil do return
+
+	c_text := strings.clone_to_cstring(text, context.temp_allocator)
+
+	surface := ttf.RenderText_Blended(font, (^u8)(c_text), 0, color)
+    if surface == nil do return
+    defer sdl.DestroySurface(surface)
+
+    texture := sdl.CreateTextureFromSurface(renderer, surface)
+    if texture == nil do return
+    defer sdl.DestroyTexture(texture)
+
+    dst_rect := sdl.FRect{
+        x = x,
+        y = y,
+        w = f32(surface.w),
+        h = f32(surface.h),
+    }
+
+    sdl.RenderTexture(renderer, texture, nil, &dst_rect)
 }
+
+render_string :: proc(renderer: ^sdl.Renderer, text: string, col, row: f32, color: sdl.FColor) {
+	byte_color: sdl.Color
+	byte_color.r = u8(color.r * 255)
+	byte_color.g = u8(color.g * 255)
+	byte_color.b = u8(color.b * 255)
+	byte_color.a = u8(color.a * 255)
+
+	render_text_string(renderer, text, col * FONT_W, row * FONT_H, byte_color)
+}
+
 
 main :: proc() {
 	// 1. Initialize Janet VM via our module
@@ -51,6 +78,9 @@ main :: proc() {
 	window := sdl.CreateWindow(config.title, win_w, win_h, {.RESIZABLE})
 	if window == nil do return
 	defer sdl.DestroyWindow(window)
+
+	_ = sdl.StartTextInput(window)
+	defer _ = sdl.StopTextInput(window)
 
 	renderer := sdl.CreateRenderer(window, nil)
 	if renderer == nil do return
@@ -98,7 +128,7 @@ main :: proc() {
 		sdl.SetRenderDrawColorFloat(renderer, config.bg_color.r, config.bg_color.g, config.bg_color.b, 1.0)
 		sdl.RenderClear(renderer)
 
-		render_string(renderer, "ModTTY Terminal Shell [Janet Module Configured]", 2, 2, config.fg_color)
+		render_string(renderer, "ModTTY Terminal Shell", 2, 2, config.fg_color)
 		render_string(renderer, "> ", 2, 4, config.accent_color)
 		if input_len > 0 {
 			user_str := string(input_buffer[:input_len])
@@ -166,26 +196,4 @@ load_janet_config :: proc(filename: cstring) -> App_Config {
 	}
 
 	return cfg
-}
-
-render_string :: proc(renderer: ^sdl.Renderer, text: string, col, row: f32, color: sdl.FColor) {
-	sdl.SetRenderDrawColorFloat(renderer, color.r, color.g, color.b, 1.0)
-	for i in 0..<len(text) {
-		ch := text[i]
-		if ch > 127 do continue
-		
-		start_x := (col + f32(i)) * FONT_W
-		start_y := row * FONT_H
-
-		bitmap := FONT_BITMAP[ch]
-		for y in 0..<16 {
-			row_byte := bitmap[y]
-			for x in 0..<8 {
-				if (row_byte & (0x80 >> u8(x))) != 0 {
-					pixel := sdl.FRect{start_x + f32(x), start_y + f32(y), 1, 1}
-					sdl.RenderFillRect(renderer, &pixel)
-				}
-			}
-		}
-	}
 }

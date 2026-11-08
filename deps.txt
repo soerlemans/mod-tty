@@ -1,0 +1,2 @@
+brew install sdl3
+brew install sdl3_ttf
