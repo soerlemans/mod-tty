@@ -1,3 +1,6 @@
+# Odin ignores
+*.bin
+
 # Prerequisites
 *.d
 
