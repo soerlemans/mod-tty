@@ -9,7 +9,7 @@ import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 import janet "janet"
 
-App_Config :: struct {
+AppConfig :: struct {
 	title:         cstring,
 	bg_color:      sdl.FColor,
 	fg_color:      sdl.FColor,
@@ -61,7 +61,8 @@ main :: proc() {
 	janet.janet_init()
 	defer janet.janet_deinit()
 
-	config := load_janet_config("init.janet")
+	env := janet.janet_core_env(nil)
+	config := load_app_config(env, "init.janet")
 	fmt.println("Loaded config from Janet module successfully!")
 
 	// 2. Initialize SDL3
@@ -159,41 +160,86 @@ main :: proc() {
 	}
 }
 
-load_janet_config :: proc(filename: cstring) -> App_Config {
-	cfg := App_Config{
-		title         = "ModTTY",
-		bg_color      = {0.07, 0.07, 0.09, 1.0},
-		fg_color      = {0.86, 0.86, 0.80, 1.0},
-		spacer_color  = {0.15, 0.15, 0.20, 1.0},
-		accent_color  = {0.40, 0.80, 1.00, 1.0},
-		spacer_height = 24.0,
+/*
+load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
+    // Default fallback config in case loading fails
+	cfg := AppConfig{
+    	title         = "ModTTY - Default",
+    	bg_color      = sdl.FColor{18.0 / 255.0, 18.0 / 255.0, 24.0 / 255.0, 1.0},
+    	fg_color      = sdl.FColor{220.0 / 255.0, 220.0 / 255.0, 204.0 / 255.0, 1.0},
+    	accent_color  = sdl.FColor{100.0 / 255.0, 200.0 / 255.0, 255.0 / 255.0, 1.0},
+    	spacer_color  = sdl.FColor{40.0 / 255.0, 40.0 / 255.0, 55.0 / 255.0, 1.0},
+    	spacer_height = 24.0,
 	}
 
-	env := janet.janet_core_env(nil)
-	data, err := os.read_entire_file_from_path(string(filename), context.allocator)
-	if err != nil {
-		fmt.println("Could not find init.janet, using default parameters.")
-		return cfg
-	}
-	defer delete(data)
+    file_data, err := os.read_entire_file(filename, context.allocator)
+    if err != nil {
+        fmt.eprintln("Warning: Could not find %s.janet. Using default config.", filename)
+        return cfg
+    }
+    defer delete(file_data)
 
-	out: janet.Janet
-	ret := janet.janet_dostring(env, cstring(raw_data(data)), filename, &out)
-	if ret != 0 {
-		fmt.println("Error evaluating init.janet script!")
-		return cfg
-	}
+    c_source := strings.clone_to_cstring(string(file_data), context.temp_allocator)
 
-	config_key := janet.janet_ckeywordv("config")
-	config_table_janet := janet.janet_table_get(env, config_key)
-	if config_table_janet != 0 {
-		config_table := (^janet.JanetTable)(uintptr(config_table_janet))
-		
-		spacer_val := janet.janet_table_get(config_table, janet.janet_ckeywordv("spacer-height"))
-		if spacer_val != 0 {
-			cfg.spacer_height = f32(janet.janet_unwrap_integer(spacer_val))
-		}
-	}
+    eval_result: janet.Janet
+    if janet.janet_dostring(env, c_source, "init.janet", &eval_result) == 0 {
+        config_table := janet.janet_unwrap_table(eval_result)
+        if config_table != nil {
+            // Read spacer-height example
+            spacer_val := janet.janet_table_get(config_table, janet.janet_cstringv("spacer-height"))
+            if spacer_val != 0 {
+                cfg.spacer_height = f32(janet.janet_unwrap_integer(spacer_val))
+            }
+            
+            // You can extract other fields here following the same pattern...
+        }
+    } else {
+        fmt.eprintln("Error evaluating init.janet script.")
+    }
 
-	return cfg
+    return cfg
+}
+*/
+
+load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
+    // 1. Safe default config fallback
+    cfg := AppConfig{
+        title         = "ModTTY - Default",
+        bg_color      = sdl.FColor{18.0 / 255.0, 18.0 / 255.0, 24.0 / 255.0, 1.0},
+        fg_color      = sdl.FColor{220.0 / 255.0, 220.0 / 255.0, 204.0 / 255.0, 1.0},
+        accent_color  = sdl.FColor{100.0 / 255.0, 200.0 / 255.0, 255.0 / 255.0, 1.0},
+        spacer_color  = sdl.FColor{40.0 / 255.0, 40.0 / 255.0, 55.0 / 255.0, 1.0},
+        spacer_height = 24.0,
+    }
+
+    file_data, err := os.read_entire_file(filename, context.allocator)
+    if err != nil {
+        fmt.eprintln("%s not found. Using default config.", filename)
+        return cfg
+    }
+    defer delete(file_data)
+
+    c_source := strings.clone_to_cstring(string(file_data), context.temp_allocator)
+
+    eval_result: janet.Janet
+    // janet_dostring returns 0 on success
+    if janet.janet_dostring(env, c_source, "init.janet", &eval_result) == 0 {
+        // Janet type 6 is JANET_TABLE. Verify type before unwrapping!
+        if janet.janet_type(eval_result) == 6 {
+            config_table := janet.janet_unwrap_table(eval_result)
+            if config_table != nil {
+                spacer_val := janet.janet_table_get(config_table, janet.janet_cstringv("spacer-height"))
+                // Ensure it's a valid number before unwrapping integer
+                if spacer_val != 0 {
+                    cfg.spacer_height = f32(janet.janet_unwrap_integer(spacer_val))
+                }
+            }
+        } else {
+            fmt.eprintln("Warning: init.janet must evaluate to a table structure (e.g. @{:spacer-height 24})")
+        }
+    } else {
+        fmt.eprintln("Error evaluating init.janet script.")
+    }
+
+    return cfg
 }

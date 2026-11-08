@@ -22,11 +22,20 @@ foreign libjanet {
 	janet_init :: proc() ---
 	janet_deinit :: proc() ---
 	janet_core_env :: proc(replacements: rawptr) -> ^JanetTable ---
+	
+	janet_type :: proc(x: Janet) -> c.int ---
+
 	janet_dostring :: proc(env: ^JanetTable, str: cstring, sourcePath: cstring, out: ^Janet) -> c.int ---
 	janet_table_get :: proc(t: ^JanetTable, key: Janet) -> Janet ---
-	janet_unwrap_integer :: proc(x: Janet) -> i32 ---
+
 	janet_csymbol :: proc(str: cstring) -> rawptr ---
+	janet_cstring :: proc(str: cstring) -> ^u8 ---
+
+    janet_wrap_string :: proc(s: ^u8) -> Janet ---
 	janet_wrap_keyword :: proc(sym: rawptr) -> Janet ---
+
+	janet_unwrap_integer :: proc(x: Janet) -> i32 ---
+	janet_unwrap_table :: proc(x: Janet) -> ^JanetTable ---
 }
 
 // Re-implement the janet_ckeywordv macro cleanly in Odin:
@@ -34,4 +43,8 @@ foreign libjanet {
 janet_ckeywordv :: proc "c" (str: cstring) -> Janet {
 	sym := janet_csymbol(str)
 	return janet_wrap_keyword(sym)
+}
+
+janet_cstringv :: proc "c" (str: cstring) -> Janet {
+    return janet_wrap_string(janet_cstring(str))
 }
