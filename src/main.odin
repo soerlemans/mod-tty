@@ -129,7 +129,6 @@ main :: proc() {
 		sdl.SetRenderDrawColorFloat(renderer, config.bg_color.r, config.bg_color.g, config.bg_color.b, 1.0)
 		sdl.RenderClear(renderer)
 
-		render_string(renderer, "ModTTY Terminal Shell", 2, 2, config.fg_color)
 		render_string(renderer, "> ", 2, 4, config.accent_color)
 		if input_len > 0 {
 			user_str := string(input_buffer[:input_len])
