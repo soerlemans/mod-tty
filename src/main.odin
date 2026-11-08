@@ -160,47 +160,6 @@ main :: proc() {
 	}
 }
 
-/*
-load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
-    // Default fallback config in case loading fails
-	cfg := AppConfig{
-    	title         = "ModTTY - Default",
-    	bg_color      = sdl.FColor{18.0 / 255.0, 18.0 / 255.0, 24.0 / 255.0, 1.0},
-    	fg_color      = sdl.FColor{220.0 / 255.0, 220.0 / 255.0, 204.0 / 255.0, 1.0},
-    	accent_color  = sdl.FColor{100.0 / 255.0, 200.0 / 255.0, 255.0 / 255.0, 1.0},
-    	spacer_color  = sdl.FColor{40.0 / 255.0, 40.0 / 255.0, 55.0 / 255.0, 1.0},
-    	spacer_height = 24.0,
-	}
-
-    file_data, err := os.read_entire_file(filename, context.allocator)
-    if err != nil {
-        fmt.eprintln("Warning: Could not find %s.janet. Using default config.", filename)
-        return cfg
-    }
-    defer delete(file_data)
-
-    c_source := strings.clone_to_cstring(string(file_data), context.temp_allocator)
-
-    eval_result: janet.Janet
-    if janet.janet_dostring(env, c_source, "init.janet", &eval_result) == 0 {
-        config_table := janet.janet_unwrap_table(eval_result)
-        if config_table != nil {
-            // Read spacer-height example
-            spacer_val := janet.janet_table_get(config_table, janet.janet_cstringv("spacer-height"))
-            if spacer_val != 0 {
-                cfg.spacer_height = f32(janet.janet_unwrap_integer(spacer_val))
-            }
-            
-            // You can extract other fields here following the same pattern...
-        }
-    } else {
-        fmt.eprintln("Error evaluating init.janet script.")
-    }
-
-    return cfg
-}
-*/
-
 load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
     // 1. Safe default config fallback
     cfg := AppConfig{
