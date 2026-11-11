@@ -85,7 +85,7 @@ main :: proc() {
 
 	// Child process launch shell.
 	if pid == 0 {
-			posix.setenv("TERM", "xterm-256color", true);
+			posix.setenv("TERM", "xterm-256color", true)
 			term := libc.getenv("TERM")
 			shell := libc.getenv("SHELL")
 
@@ -113,7 +113,7 @@ main :: proc() {
 	defer sdl.Quit()
 
 	if !ttf.Init() {
-		fmt.println("Failed to initialize SDL3:", sdl.GetError())
+		fmt.println("Failed to initialize TTF:", sdl.GetError())
 		return
 	}
 	defer ttf.Quit()
@@ -137,8 +137,8 @@ main :: proc() {
 	renderer := sdl.CreateRenderer(window, nil)
 	if renderer == nil do return
 	defer sdl.DestroyRenderer(renderer)
-	
-	// Create a text engine tied to your SDL renderer
+
+	// Create a text engine tied to your SDL renderer.
 	text_engine := ttf.CreateRendererTextEngine(renderer)
 	if text_engine == nil {
     	fmt.eprintln("Failed to create text engine:", sdl.GetError())
@@ -166,12 +166,15 @@ main :: proc() {
 		for sdl.PollEvent(&event) {
 			#partial switch event.type {
 			case .QUIT:
-				running = false
+					running = false
+
+			// This is Enter.
 			case .KEY_DOWN:
 				if event.key.key == sdl.K_BACKSPACE && input_len > 0 {
 					input_len -= 1
 				} else if event.key.key == sdl.K_RETURN {
-					input_len = 0
+						posix.write(master_fd, raw_data(input_buffer[:]), uint(input_len))
+						input_len = 0
 				}
 			case .TEXT_INPUT:
 				text_bytes := string(event.text.text)
@@ -187,7 +190,25 @@ main :: proc() {
 		sdl.SetRenderDrawColorFloat(renderer, config.bg_color.r, config.bg_color.g, config.bg_color.b, 1.0)
 		sdl.RenderClear(renderer)
 
-			render_string(renderer, font, "> ", 2, 4, config.accent_color)
+		read_buf: [4096]u8
+		bytes_read := posix.read(master_fd, raw_data(read_buf[:]), len(read_buf))
+		if bytes_read > 0 {
+				output := string(read_buf[:])
+				fmt.printf("output: %s\n", output)
+		} else if bytes_read == 0 {
+         // EOF: child closed the PTY.
+         running = false
+    } else {
+         // n == -1: check errno.
+        err := posix.errno()
+        if !(err == .EAGAIN || err == .EWOULDBLOCK) {
+            // EIO (child exited on Linux) or another real error
+						libc.perror("Error.")
+            running = false
+				}
+    }
+
+		render_string(renderer, font, "> ", 2, 4, config.accent_color)
 		if input_len > 0 {
 			user_str := string(input_buffer[:input_len])
 				render_string(renderer, font, user_str, 4, 4, config.fg_color)
