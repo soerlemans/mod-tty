@@ -153,7 +153,9 @@ shell_process :: proc() {
 	posix.setenv("TERM", "xterm-256color", true)
 	term := libc.getenv("TERM")
 	// shell := libc.getenv("SHELL")
+
 	// Easier to debug then ZSH for now.
+	posix.setenv("PS1", "~ ", true)
 	shell := cstring("/bin/sh")
 	if len(shell) == 0 {
 		shell = cstring("/bin/sh")
@@ -329,8 +331,14 @@ main :: proc() {
 			render_string(&ctx, user_str, 4, 4, config.fg_color)
 		}
 
+		// TODO: Internal render is not loading???
+		// Its only briefly visible and then gets overwriten again?
+		render_string(&ctx, "Out: ", 2, 6, config.fg_color)
 		if len(output) > 0 {
-				render_string(&ctx, output, 4, 6, config.fg_color)
+				// if idx := strings.index_any(output, "\r\n"); idx != -1 {
+				// 		output = output[:idx]
+				// }
+			render_string(&ctx, output, 4, 6, config.fg_color)
 		}
 
 		if (sdl.GetTicks() / 500) % 2 == 0 {
