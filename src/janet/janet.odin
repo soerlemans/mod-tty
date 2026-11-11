@@ -10,20 +10,39 @@ when ODIN_OS == .Windows {
 }
 
 // Janet's primary 64-bit tagged value type.
-Janet :: u64 
+Janet :: u64
 
 // Opaque pointer types for Janet VM constructs.
 JanetTable :: struct {}
 JanetFiber :: struct {}
 JanetEvalFlags :: c.int
 
+JanetType :: enum c.int {
+    JANET_NUMBER,
+    JANET_NIL,
+    JANET_BOOLEAN,
+    JANET_FIBER,
+    JANET_STRING,
+    JANET_SYMBOL,
+    JANET_KEYWORD,
+    JANET_ARRAY,
+    JANET_TUPLE,
+    JANET_TABLE,
+    JANET_STRUCT,
+    JANET_BUFFER,
+    JANET_FUNCTION,
+    JANET_CFUNCTION,
+    JANET_ABSTRACT,
+    JANET_POINTER
+}
+
 @(default_calling_convention = "c")
 foreign libjanet {
 	janet_init :: proc() ---
 	janet_deinit :: proc() ---
 	janet_core_env :: proc(replacements: rawptr) -> ^JanetTable ---
-	
-	janet_type :: proc(x: Janet) -> c.int ---
+
+	janet_type :: proc(x: Janet) -> JanetType ---
 
 	janet_dostring :: proc(env: ^JanetTable, str: cstring, sourcePath: cstring, out: ^Janet) -> c.int ---
 	janet_table_get :: proc(t: ^JanetTable, key: Janet) -> Janet ---
@@ -31,7 +50,7 @@ foreign libjanet {
 	janet_csymbol :: proc(str: cstring) -> rawptr ---
 	janet_cstring :: proc(str: cstring) -> ^u8 ---
 
-    janet_wrap_string :: proc(s: ^u8) -> Janet ---
+  janet_wrap_string :: proc(s: ^u8) -> Janet ---
 	janet_wrap_keyword :: proc(sym: rawptr) -> Janet ---
 
 	janet_unwrap_integer :: proc(x: Janet) -> i32 ---

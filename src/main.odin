@@ -3,11 +3,13 @@ package main
 import "core:fmt"
 import "core:os"
 import "core:c"
+import "core:c/libc"
 import "core:strings"
+import "core:sys/posix"
 
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
-import janet "janet"
+import j "janet"
 
 import vterm "sys_vterm"
 import u "sys_util"
@@ -25,9 +27,8 @@ AppConfig :: struct {
 FONT_W :: 8
 FONT_H :: 16
 
-render_text_string :: proc(renderer: ^sdl.Renderer, text: string, x, y: f32, color: sdl.Color) {
-    font := get_system_font()
-    if font == nil do return
+render_text_string :: proc(renderer: ^sdl.Renderer, font: ^ttf.Font, text: string, x, y: f32, color: sdl.Color) {
+  if font == nil do return
 
 	c_text := strings.clone_to_cstring(text, context.temp_allocator)
 
@@ -49,27 +50,60 @@ render_text_string :: proc(renderer: ^sdl.Renderer, text: string, x, y: f32, col
     sdl.RenderTexture(renderer, texture, nil, &dst_rect)
 }
 
-render_string :: proc(renderer: ^sdl.Renderer, text: string, col, row: f32, color: sdl.FColor) {
+render_string :: proc(renderer: ^sdl.Renderer, font: ^ttf.Font, text: string, col, row: f32, color: sdl.FColor) {
 	byte_color: sdl.Color
 	byte_color.r = u8(color.r * 255)
 	byte_color.g = u8(color.g * 255)
 	byte_color.b = u8(color.b * 255)
 	byte_color.a = u8(color.a * 255)
 
-	render_text_string(renderer, text, col * FONT_W, row * FONT_H, byte_color)
+	render_text_string(renderer, font, text, col * FONT_W, row * FONT_H, byte_color)
 }
 
 
 main :: proc() {
-	// Initialize Janet VM via our module.
-	janet.janet_init()
-	defer janet.janet_deinit()
+	// Initialize Janet VM, and load configuration.
+	j.janet_init()
+	defer j.janet_deinit()
 
-	env := janet.janet_core_env(nil)
+	env := j.janet_core_env(nil)
 	config := load_app_config(env, "init.janet")
-	fmt.println("Loaded config from Janet module successfully!")
 
-	ws: u.winsize
+	// PTY setup.
+	master_fd: posix.FD =0
+	ws := u.winsize{
+			ws_row = 24,
+			ws_col = 80,
+			ws_xpixel = 0,
+			ws_ypixel = 0,
+	}
+	pid := u.forkpty(&master_fd, nil, nil, &ws)
+	if pid < 0 {
+			libc.perror("Failed to open PTY")
+			return
+	}
+
+	// Child process launch shell.
+	if pid == 0 {
+			posix.setenv("TERM", "xterm-256color", true);
+			term := libc.getenv("TERM")
+			shell := libc.getenv("SHELL")
+
+			// TODO: Have this log back to master pid_t somehow.
+			fmt.println("TERM=", term)
+			fmt.println("SHELL=", shell)
+
+			posix.execlp(shell, shell, nil)
+			libc.perror("execlp")
+			os.exit(1)
+	}
+
+  // Set master PTY non-blocking so we can poll it cleanly in the UI loop
+	flags := posix.fcntl(master_fd, .GETFL, 0)
+
+  O_NONBLOCK := transmute(c.int)posix.O_Flags{.NONBLOCK}
+	posix.fcntl(master_fd, .SETFL, flags | O_NONBLOCK, 0)
+
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
@@ -77,6 +111,16 @@ main :: proc() {
 		return
 	}
 	defer sdl.Quit()
+
+	if !ttf.Init() {
+		fmt.println("Failed to initialize SDL3:", sdl.GetError())
+		return
+	}
+	defer ttf.Quit()
+
+	// Load font.
+	font := load_sys_font()
+	defer ttf.CloseFont(font)
 
 	cols, rows := 80, 24
 	win_w := i32(cols * FONT_W)
@@ -143,10 +187,10 @@ main :: proc() {
 		sdl.SetRenderDrawColorFloat(renderer, config.bg_color.r, config.bg_color.g, config.bg_color.b, 1.0)
 		sdl.RenderClear(renderer)
 
-		render_string(renderer, "> ", 2, 4, config.accent_color)
+			render_string(renderer, font, "> ", 2, 4, config.accent_color)
 		if input_len > 0 {
 			user_str := string(input_buffer[:input_len])
-			render_string(renderer, user_str, 4, 4, config.fg_color)
+				render_string(renderer, font, user_str, 4, 4, config.fg_color)
 		}
 
 		if (sdl.GetTicks() / 500) % 2 == 0 {
@@ -167,13 +211,13 @@ main :: proc() {
 		sdl.RenderFillRect(renderer, &spacer_rect)
 
 		diag_text := fmt.tprintf("FPS: %.1f | Spacer: %.0fpix | Status: Active", fps, config.spacer_height)
-		render_string(renderer, diag_text, 1, f32(win_h - 18) / FONT_H, config.accent_color)
+			render_string(renderer, font, diag_text, 1, f32(win_h - 18) / FONT_H, config.accent_color)
 
 		sdl.RenderPresent(renderer)
 	}
 }
 
-load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
+load_app_config :: proc(env: ^j.JanetTable, filename: string) -> AppConfig {
     // 1. Safe default config fallback
     cfg := AppConfig{
         title         = "ModTTY - Default",
@@ -193,21 +237,22 @@ load_app_config :: proc(env: ^janet.JanetTable, filename: string) -> AppConfig {
 
     c_source := strings.clone_to_cstring(string(file_data), context.temp_allocator)
 
-    eval_result: janet.Janet
-    // janet_dostring returns 0 on success
-    if janet.janet_dostring(env, c_source, "init.janet", &eval_result) == 0 {
-        // Janet type 6 is JANET_TABLE. Verify type before unwrapping!
-        if janet.janet_type(eval_result) == 6 {
-            config_table := janet.janet_unwrap_table(eval_result)
+    eval_result: j.Janet
+    // janet_dostring returns 0 on success.
+    if j.janet_dostring(env, c_source, "filename", &eval_result) == 0 {
+				type_kind := j.janet_type(eval_result)
+        if type_kind == j.JanetType.JANET_TABLE {
+            config_table := j.janet_unwrap_table(eval_result)
             if config_table != nil {
-                spacer_val := janet.janet_table_get(config_table, janet.janet_cstringv("spacer-height"))
+                spacer_val := j.janet_table_get(config_table, j.janet_cstringv("spacer-height"))
                 // Ensure it's a valid number before unwrapping integer
                 if spacer_val != 0 {
-                    cfg.spacer_height = f32(janet.janet_unwrap_integer(spacer_val))
+                    cfg.spacer_height = f32(j.janet_unwrap_integer(spacer_val))
+										fmt.eprintln("Spacer heigh: ", cfg.spacer_height)
                 }
             }
         } else {
-            fmt.eprintln("Warning: init.janet must evaluate to a table structure (e.g. @{:spacer-height 24})")
+            fmt.eprintln("Warning: Unhandled janet type", type_kind)
         }
     } else {
         fmt.eprintln("Error evaluating init.janet script.")
