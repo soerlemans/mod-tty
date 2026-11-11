@@ -9,6 +9,10 @@ import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 import janet "janet"
 
+import vterm "sys_vterm"
+import u "sys_util"
+
+
 AppConfig :: struct {
 	title:         cstring,
 	bg_color:      sdl.FColor,
@@ -64,6 +68,8 @@ main :: proc() {
 	env := janet.janet_core_env(nil)
 	config := load_app_config(env, "init.janet")
 	fmt.println("Loaded config from Janet module successfully!")
+
+	ws: u.winsize
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
