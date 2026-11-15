@@ -201,6 +201,8 @@ pty_init :: proc() -> posix.FD {
 }
 
 main :: proc() {
+	cols, rows: i32 = 80, 30
+
 	// Initialize Janet VM, and load configuration.
 	j.janet_init()
 	defer j.janet_deinit()
@@ -208,9 +210,18 @@ main :: proc() {
 	env := j.janet_core_env(nil)
 	config := load_app_config(env, "init.janet")
 
+	win_w := i32(cols * font_w)
+	win_h := i32(f32(rows * font_h) + config.spacer_height)
+
 	// PTY setup.
 	master_fd := pty_init()
 	defer posix.close(master_fd)
+
+	// Libvterm setup
+	vt := vterm.vterm_new(rows, cols)
+	defer vterm.vterm_free(vt)
+	vterm.vterm_set_utf8(vt, 1)
+	vterm_screen := vterm.vterm_obtain_screen(vt)
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
@@ -228,10 +239,6 @@ main :: proc() {
 	// Load font.
 	font := load_font()
 	defer ttf.CloseFont(font)
-
-	cols, rows: i32 = 80, 30
-	win_w := i32(cols * font_w)
-	win_h := i32(f32(rows * font_h) + config.spacer_height)
 
 	window := sdl.CreateWindow(config.title, win_w, win_h, {.RESIZABLE})
 	if window == nil do return
@@ -259,7 +266,7 @@ main :: proc() {
 	fps: f32 = 60.0
 
 	running := true
-	output: string
+	output := "Test"
 	input_buffer: [256]u8
 	input_len: int = 0
 	for running {
@@ -310,8 +317,11 @@ main :: proc() {
 		read_buf: [4096]u8
 		bytes_read := posix.read(master_fd, raw_data(read_buf[:]), len(read_buf))
 		if bytes_read > 0 {
-			output = string(read_buf[:bytes_read])
+			output = strings.clone(string(read_buf[:bytes_read])) // Copy.
 			fmt.printf("output: %s\n", output)
+
+			// IODO: Figure out.
+			vterm.vterm_write(vt, raw_data(read_buf[:bytes_read]), uint(bytes_read))
 		} else if bytes_read == 0 {
 			// EOF: child closed the PTY.
 			running = false
@@ -335,10 +345,7 @@ main :: proc() {
 		// Its only briefly visible and then gets overwriten again?
 		render_string(&ctx, "Out: ", 2, 6, config.fg_color)
 		if len(output) > 0 {
-				// if idx := strings.index_any(output, "\r\n"); idx != -1 {
-				// 		output = output[:idx]
-				// }
-			render_string(&ctx, output, 4, 6, config.fg_color)
+			render_string(&ctx, output, 6, 6, config.fg_color)
 		}
 
 		if (sdl.GetTicks() / 500) % 2 == 0 {
