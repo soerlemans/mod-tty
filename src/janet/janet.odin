@@ -4,9 +4,9 @@ import "core:c"
 
 // FIXME: No Windows compilation at the moment.
 when ODIN_OS == .Windows {
-    foreign import libjanet "../../out/janet.lib"
+	foreign import libjanet "../../out/janet.lib"
 } else when ODIN_OS == .Darwin || ODIN_OS == .Linux {
-    foreign import libjanet "../../out/janet.a"
+	foreign import libjanet "../../out/janet.a"
 }
 
 // Janet's primary 64-bit tagged value type.
@@ -18,22 +18,22 @@ JanetFiber :: struct {}
 JanetEvalFlags :: c.int
 
 JanetType :: enum c.int {
-    JANET_NUMBER,
-    JANET_NIL,
-    JANET_BOOLEAN,
-    JANET_FIBER,
-    JANET_STRING,
-    JANET_SYMBOL,
-    JANET_KEYWORD,
-    JANET_ARRAY,
-    JANET_TUPLE,
-    JANET_TABLE,
-    JANET_STRUCT,
-    JANET_BUFFER,
-    JANET_FUNCTION,
-    JANET_CFUNCTION,
-    JANET_ABSTRACT,
-    JANET_POINTER
+	JANET_NUMBER,
+	JANET_NIL,
+	JANET_BOOLEAN,
+	JANET_FIBER,
+	JANET_STRING,
+	JANET_SYMBOL,
+	JANET_KEYWORD,
+	JANET_ARRAY,
+	JANET_TUPLE,
+	JANET_TABLE,
+	JANET_STRUCT,
+	JANET_BUFFER,
+	JANET_FUNCTION,
+	JANET_CFUNCTION,
+	JANET_ABSTRACT,
+	JANET_POINTER,
 }
 
 @(default_calling_convention = "c")
@@ -50,7 +50,7 @@ foreign libjanet {
 	janet_csymbol :: proc(str: cstring) -> rawptr ---
 	janet_cstring :: proc(str: cstring) -> ^u8 ---
 
-  janet_wrap_string :: proc(s: ^u8) -> Janet ---
+	janet_wrap_string :: proc(s: ^u8) -> Janet ---
 	janet_wrap_keyword :: proc(sym: rawptr) -> Janet ---
 
 	janet_unwrap_integer :: proc(x: Janet) -> i32 ---
@@ -65,5 +65,5 @@ janet_ckeywordv :: proc "c" (str: cstring) -> Janet {
 }
 
 janet_cstringv :: proc "c" (str: cstring) -> Janet {
-    return janet_wrap_string(janet_cstring(str))
+	return janet_wrap_string(janet_cstring(str))
 }

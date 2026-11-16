@@ -2,15 +2,19 @@ package terminal
 
 import "base:runtime"
 import "core:c"
+import "core:fmt"
 import "core:slice"
 import "core:sys/posix"
-import "core:fmt"
 
+import sdl "vendor:sdl3"
+import ttf "vendor:sdl3/ttf"
+
+import render "../render"
 import vterm "../sys_vterm"
 
 TerminalStatus :: enum {
-		OK,
-		FAIL
+	OK,
+	FAIL,
 }
 
 // Scrollback line stored in your own ring buffer
@@ -41,11 +45,11 @@ Terminal :: struct {
 on_vterm_output :: proc "c" (s: [^]u8, len: c.size_t, user: rawptr) {
 	context = runtime.default_context()
 
-	fmt.println("on_vterm_output: ", s[:len]);
+	fmt.println("on_vterm_output: ", s[:len])
 	term := cast(^Terminal)user
 	if len > 0 {
-			fmt.println("on_vterm_output: ", s[:len]);
-			posix.write(posix.FD(term.pty_fd), s, uint(len))
+		fmt.println("on_vterm_output: ", s[:len])
+		posix.write(posix.FD(term.pty_fd), s, uint(len))
 	}
 }
 
@@ -68,11 +72,16 @@ on_moverect :: proc "c" (dest: vterm.VTermRect, src: vterm.VTermRect, user: rawp
 }
 
 // MoveCursor (Required for rendering cursor): Tracks cursor coordinates & visibility.
-on_movecursor :: proc "c" (pos: vterm.VTermPos, oldpos: vterm.VTermPos, visible: c.int, user: rawptr) -> c.int {
+on_movecursor :: proc "c" (
+	pos: vterm.VTermPos,
+	oldpos: vterm.VTermPos,
+	visible: c.int,
+	user: rawptr,
+) -> c.int {
 	term := cast(^Terminal)user
-	term.cursor_pos     = pos
+	term.cursor_pos = pos
 	term.cursor_visible = (visible != 0)
-	term.dirty          = true
+	term.dirty = true
 	return 1
 }
 
@@ -81,16 +90,16 @@ on_settermprop :: proc "c" (prop: vterm.VTermProp, val: ^vterm.VTermValue, user:
 	term := cast(^Terminal)user
 	#partial switch prop {
 	case .TITLE:
-		// val.str is a VTermStringFragment { str: [^]u8, len: size_t, initial: bool, final: bool }
-		// Copy fragments into term.title to update your OS window title bar
+	// val.str is a VTermStringFragment { str: [^]u8, len: size_t, initial: bool, final: bool }
+	// Copy fragments into term.title to update your OS window title bar
 	case .CURSORSHAPE:
-		// val.number: 1 = Block, 2 = Underline, 3 = Bar
+	// val.number: 1 = Block, 2 = Underline, 3 = Bar
 	case .CURSORBLINK:
-		// val.boolean: toggle cursor blink timer
+	// val.boolean: toggle cursor blink timer
 	case .ALTSCREEN:
-		// val.boolean: true when entering vim/htop, false when exiting
+	// val.boolean: true when entering vim/htop, false when exiting
 	case .MOUSE:
-		// val.number: mouse reporting mode requested by TUI app
+	// val.number: mouse reporting mode requested by TUI app
 	}
 	return 1
 }
@@ -142,7 +151,7 @@ on_sb_popline :: proc "c" (cols: c.int, cells: [^]vterm.VTermScreenCell, user: r
 	// Copy saved cells back into libvterm's buffer, padding or truncating to `cols`
 	copy_count := min(int(cols), len(last.cells))
 	copy(cells[:copy_count], last.cells[:copy_count])
-	for i in copy_count..<int(cols) {
+	for i in copy_count ..< int(cols) {
 		cells[i] = {} // Blank-fill remaining columns if terminal got wider
 	}
 	return 1 // Tell libvterm a line was restored
@@ -160,40 +169,146 @@ on_sb_clear :: proc "c" (user: rawptr) -> c.int {
 }
 
 // We never change the callbacks during runtime so its effectively a constant.
-VTERM_CALLBACKS := vterm.VTermScreenCallbacks{
-		damage = on_damage,
-		moverect = on_moverect,
-		movecursor = on_movecursor,
-		settermprop = on_settermprop,
-		bell = on_bell,
-		resize = on_resize,
-		sb_pushline = on_sb_pushline,
-		sb_popline = on_sb_popline,
-		sb_clear = on_sb_clear
+VTERM_CALLBACKS := vterm.VTermScreenCallbacks {
+	damage      = on_damage,
+	moverect    = on_moverect,
+	movecursor  = on_movecursor,
+	settermprop = on_settermprop,
+	bell        = on_bell,
+	resize      = on_resize,
+	sb_pushline = on_sb_pushline,
+	sb_popline  = on_sb_popline,
+	sb_clear    = on_sb_clear,
 }
 
 init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
-		term := new(Terminal)
+	term := new(Terminal)
 
-		// Init members.
-		term.pty_fd = pty_fd
-		term.rows = rows
-		term.cols = cols
+	// Init members.
+	term.pty_fd = pty_fd
+	term.rows = rows
+	term.cols = cols
 
-		term.vt = vterm.vterm_new(rows, cols)
-		if term.vt == nil do return nil, .FAIL
+	term.vt = vterm.vterm_new(rows, cols)
+	if term.vt == nil do return nil, .FAIL
 
-		vterm.vterm_set_utf8(term.vt, 1)
-		term.vt_screen = vterm.vterm_obtain_screen(term.vt)
+	vterm.vterm_set_utf8(term.vt, 1)
+	term.vt_screen = vterm.vterm_obtain_screen(term.vt)
 
-		vterm.vterm_output_set_callback(term.vt, on_vterm_output, term)
-		vterm.vterm_screen_set_callbacks(term.vt_screen, &VTERM_CALLBACKS, term)
+	vterm.vterm_output_set_callback(term.vt, on_vterm_output, term)
+	vterm.vterm_screen_set_callbacks(term.vt_screen, &VTERM_CALLBACKS, term)
 
-		return term, .OK
+	return term, .OK
 }
 
-free::proc(term: ^Terminal) {
-		vterm.vterm_free(term.vt)
+draw_rect :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32, color: vterm.VTermColor) {
+	sdl.SetRenderDrawColor(renderer, color.rgb.red, color.rgb.green, color.rgb.blue, 255)
+	rect := sdl.FRect{x = x, y = y, w = w, h = h}
+	sdl.RenderFillRect(renderer, &rect)
+}
 
-		free(term)
+draw_glyph :: proc(
+	render_ctx: ^render.RenderContext,
+	r: rune,
+	px_x, px_y: f32,
+	fg: vterm.VTermColor,
+	cell_w, cell_h: f32,
+) {
+	// Skip drawing if it's an empty space or null character
+	if r == 0 || r == ' ' do return
+
+	sdl_color := sdl.Color{
+		fg.rgb.red,
+		fg.rgb.green,
+		fg.rgb.blue,
+		255,
+	}
+
+	// Rasterize the single rune into an SDL surface using SDL_ttf
+	font := render_ctx.font
+	renderer := render_ctx.renderer
+	surface := ttf.RenderGlyph_Blended(font, u32(r), sdl_color)
+	if surface == nil do return
+	defer sdl.DestroySurface(surface)
+
+	// Convert the surface to an SDL texture for rendering
+	texture := sdl.CreateTextureFromSurface(renderer, surface)
+	if texture == nil do return
+	defer sdl.DestroyTexture(texture)
+
+	dst_rect := sdl.FRect{
+		x = px_x,
+		y = px_y,
+		w = cell_w,
+		h = cell_h,
+	}
+
+	sdl.RenderTexture(renderer, texture, nil, &dst_rect)
+}
+
+draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
+	// Draw a semi-transparent or solid white cursor box.
+	sdl.SetRenderDrawColor(renderer, 200, 200, 200, 200)
+	rect := sdl.FRect{x = x, y = y, w = w, h = h}
+	sdl.RenderFillRect(renderer, &rect)
+}
+
+render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
+		renderer := render_ctx.renderer
+		CELL_W := f32(render.font_w)
+		CELL_H := f32(render.font_h)
+
+	// 1. Draw the solid background rectangle for every cell first
+	//    (so wide glyphs or antialiasing don't bleed across cell borders)
+	for row in 0 ..< term.rows {
+		col: i32 = 0
+		for col < term.cols {
+			cell: vterm.VTermScreenCell
+			cell_pos := vterm.VTermPos{row = row, col = col}
+			vterm.vterm_screen_get_cell(term.vt_screen, cell_pos, &cell)
+
+			// Convert indexed/default colors into concrete RGB
+			vterm.vterm_screen_convert_color_to_rgb(term.vt_screen, &cell.fg)
+			vterm.vterm_screen_convert_color_to_rgb(term.vt_screen, &cell.bg)
+
+			// Handle reverse video attribute (used by selections, cursors, status bars).
+			fg, bg := cell.fg, cell.bg
+			if cell.attrs.reverse != 0 {
+				fg, bg = bg, fg
+			}
+
+			width := i32(max(cell.width, 1))
+			px_x := f32(col) * CELL_W
+			px_y := f32(row) * CELL_H
+
+			draw_rect(
+				renderer,
+				px_x,
+				px_y,
+				f32(width) * CELL_W,
+				CELL_H,
+				bg,
+			)
+
+			// 2. Draw the glyph if the cell is not empty (`chars[0] == 0` means space/blank)
+			if cell.chars[0] != 0 {
+				draw_glyph(render_ctx, rune(cell.chars[0]), px_x, px_y, fg, CELL_W, CELL_H)
+			}
+
+			col += width
+		}
+	}
+
+	// 3. Draw the cursor on top at `term.cursor_pos`
+	if term.cursor_visible {
+		cx := f32(term.cursor_pos.col) * CELL_W
+		cy := f32(term.cursor_pos.row) * CELL_H
+		draw_cursor(renderer, cx, cy, CELL_W, CELL_H)
+	}
+}
+
+free :: proc(term: ^Terminal) {
+	vterm.vterm_free(term.vt)
+
+	free(term)
 }
