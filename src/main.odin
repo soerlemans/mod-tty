@@ -13,6 +13,7 @@ import ttf "vendor:sdl3/ttf"
 
 import u "sys_util"
 import vterm "sys_vterm"
+import term "terminal"
 
 
 AppConfig :: struct {
@@ -218,10 +219,12 @@ main :: proc() {
 	defer posix.close(master_fd)
 
 	// Libvterm setup
-	vt := vterm.vterm_new(rows, cols)
-	defer vterm.vterm_free(vt)
-	vterm.vterm_set_utf8(vt, 1)
-	vterm_screen := vterm.vterm_obtain_screen(vt)
+	terminal, state := term.init(master_fd, rows, cols)
+	if state != .OK {
+			fmt.println("Failed to init Terminal!")
+			return
+	}
+	defer term.free(terminal)
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
@@ -291,7 +294,8 @@ main :: proc() {
 					fmt.println("Sending command:", string(input_buffer[:input_len]))
 					input_buffer[input_len] = '\r'
 					input_len += 1
-					posix.write(master_fd, raw_data(input_buffer[:input_len]), uint(input_len))
+					// posix.write(master_fd, raw_data(input_buffer[:input_len]), uint(input_len))
+						vterm.vterm_keyboard_key(terminal.vt, .ENTER, .NONE)
 					input_len = 0
 				}
 			case .TEXT_INPUT:
@@ -300,6 +304,9 @@ main :: proc() {
 					if input_len < len(input_buffer) {
 						input_buffer[input_len] = text_bytes[i]
 						input_len += 1
+
+						// FIXME: For now just send byte per byte as its the most simple (but very inefficient).
+						vterm.vterm_keyboard_unichar(terminal.vt, u32(text_bytes[i]), .NONE);
 					}
 				}
 			}
@@ -320,8 +327,8 @@ main :: proc() {
 			output = strings.clone(string(read_buf[:bytes_read])) // Copy.
 			fmt.printf("output: %s\n", output)
 
-			// IODO: Figure out.
-			vterm.vterm_write(vt, raw_data(read_buf[:bytes_read]), uint(bytes_read))
+			// TODO: Figure out.
+			//vterm.vterm_write(vt, raw_data(read_buf[:bytes_read]), uint(bytes_read))
 		} else if bytes_read == 0 {
 			// EOF: child closed the PTY.
 			running = false
