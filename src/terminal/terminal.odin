@@ -202,7 +202,12 @@ init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
 
 draw_rect :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32, color: vterm.VTermColor) {
 	sdl.SetRenderDrawColor(renderer, color.rgb.red, color.rgb.green, color.rgb.blue, 255)
-	rect := sdl.FRect{x = x, y = y, w = w, h = h}
+	rect := sdl.FRect {
+		x = x,
+		y = y,
+		w = w,
+		h = h,
+	}
 	sdl.RenderFillRect(renderer, &rect)
 }
 
@@ -216,12 +221,7 @@ draw_glyph :: proc(
 	// Skip drawing if it's an empty space or null character
 	if r == 0 || r == ' ' do return
 
-	sdl_color := sdl.Color{
-		fg.rgb.red,
-		fg.rgb.green,
-		fg.rgb.blue,
-		255,
-	}
+	sdl_color := sdl.Color{fg.rgb.red, fg.rgb.green, fg.rgb.blue, 255}
 
 	// Rasterize the single rune into an SDL surface using SDL_ttf
 	font := render_ctx.font
@@ -235,7 +235,7 @@ draw_glyph :: proc(
 	if texture == nil do return
 	defer sdl.DestroyTexture(texture)
 
-	dst_rect := sdl.FRect{
+	dst_rect := sdl.FRect {
 		x = px_x,
 		y = px_y,
 		w = cell_w,
@@ -248,7 +248,12 @@ draw_glyph :: proc(
 draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
 	// Draw a semi-transparent or solid white cursor box.
 	sdl.SetRenderDrawColor(renderer, 200, 200, 200, 200)
-	rect := sdl.FRect{x = x, y = y, w = w, h = h}
+	rect := sdl.FRect {
+		x = x,
+		y = y,
+		w = w,
+		h = h,
+	}
 	sdl.RenderFillRect(renderer, &rect)
 }
 
@@ -267,7 +272,10 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 		col: i32 = 0
 		for col < term.cols {
 			cell: vterm.VTermScreenCell
-			cell_pos := vterm.VTermPos{row = row, col = col}
+			cell_pos := vterm.VTermPos {
+				row = row,
+				col = col,
+			}
 			vterm.vterm_screen_get_cell(term.vt_screen, cell_pos, &cell)
 
 			// Convert indexed/default colors into concrete RGB
@@ -284,18 +292,11 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 			px_x := f32(col) * CELL_W
 			px_y := f32(row) * CELL_H
 
-			draw_rect(
-				renderer,
-				px_x,
-				px_y,
-				f32(width) * CELL_W,
-				CELL_H,
-				bg,
-			)
+			draw_rect(renderer, px_x, px_y, f32(width) * CELL_W, CELL_H, bg)
 
 			// 2. Draw the glyph if the cell is not empty (`chars[0] == 0` means space/blank)
 			if cell.chars[0] != 0 {
-					fmt.println("cell:", cell.chars[0])
+				fmt.println("cell:", cell.chars[0])
 				draw_glyph(render_ctx, rune(cell.chars[0]), px_x, px_y, fg, CELL_W, CELL_H)
 			}
 

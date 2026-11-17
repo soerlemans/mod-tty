@@ -194,18 +194,13 @@ main :: proc() {
 
 		read_buf: [4096]u8
 		bytes_read := posix.read(master_fd, raw_data(read_buf[:]), len(read_buf))
-			if bytes_read > 0 {
+		if bytes_read > 0 {
+			ptr := &read_buf[0]
+			write_len := c.size_t(bytes_read)
+			vterm.vterm_input_write(terminal.vt, ptr, write_len)
 
-			ptr: [10]u8 = {'T', 'E', 'S', 'T', '\r', '\n', 0, 0, 0, 0}
-			write_len := c.size_t(6)
-
-			// ptr := &read_buf[0]
-			// write_len := c.size_t(bytes_read)
-			// vterm.vterm_input_write(terminal.vt, ptr, write_len)
-
-			vterm.vterm_input_write(terminal.vt, &ptr[0], write_len)
-			// output = strings.clone(string(read_buf[:bytes_read])) // Copy.
-			// fmt.printf("output: %s\n", output)
+			output = strings.clone(string(read_buf[:bytes_read])) // Copy.
+			fmt.printf("output: %s\n", output)
 		} else if bytes_read == 0 {
 			// EOF: child closed the PTY.
 			running = false

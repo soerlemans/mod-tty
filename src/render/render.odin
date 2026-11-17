@@ -52,7 +52,12 @@ render_string :: proc(ctx: ^RenderContext, text: string, col, row: f32, color: s
 	render_text_string(ctx, text, x, y, byte_color)
 }
 
-render_spacer_bar :: proc(ctx: ^RenderContext, win_h, win_w: f32, config: ^ap.AppConfig, fps: f32) {
+render_spacer_bar :: proc(
+	ctx: ^RenderContext,
+	win_h, win_w: f32,
+	config: ^ap.AppConfig,
+	fps: f32,
+) {
 	// Diagnostic spacer bar.
 	spacer_rect := sdl.FRect {
 		0,
