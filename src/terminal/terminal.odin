@@ -24,6 +24,7 @@ ScrollbackLine :: struct {
 
 Terminal :: struct {
 	vt:             ^vterm.VTerm,
+	vt_state:       ^vterm.VTermState,
 	vt_screen:      ^vterm.VTermScreen,
 	pty_fd:         posix.FD,
 	rows:           c.int,
@@ -192,8 +193,15 @@ init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
 	if term.vt == nil do return nil, .FAIL
 
 	vterm.vterm_set_utf8(term.vt, 1)
-	term.vt_screen = vterm.vterm_obtain_screen(term.vt)
 
+	// Make callbacks reregister due to UTF-8 encoding change.
+	term.vt_state = vterm.vterm_obtain_state(term.vt)
+	vterm.vterm_state_reset(term.vt_state, 1)
+
+	term.vt_screen = vterm.vterm_obtain_screen(term.vt)
+	vterm.vterm_screen_reset(term.vt_screen, 1)
+
+	// Set callbacks.
 	vterm.vterm_output_set_callback(term.vt, on_vterm_output, term)
 	vterm.vterm_screen_set_callbacks(term.vt_screen, &VTERM_CALLBACKS, term)
 

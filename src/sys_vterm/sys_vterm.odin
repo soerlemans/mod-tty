@@ -103,8 +103,8 @@ VTermValue :: struct #raw_union {
 
 // Opaque C handles
 VTerm :: struct {}
-VTermScreen :: struct {}
 VTermState :: struct {}
+VTermScreen :: struct {}
 
 VTermPos :: struct {
 	row: c.int,
@@ -167,11 +167,14 @@ foreign libvterm {
 	vterm_output_read :: proc(vt: ^VTerm, buffer: [^]u8, len: c.size_t) -> c.size_t ---
 	vterm_output_set_callback :: proc(vt: ^VTerm, func: VTermOutputCallback, user: rawptr) ---
 
+	// State layer
+	vterm_obtain_state :: proc(vt: ^VTerm) -> ^VTermState ---
+	vterm_state_reset :: proc(state: ^VTermState, hard: c.int) ---
 
 	// Screen layer
 	vterm_obtain_screen :: proc(vt: ^VTerm) -> ^VTermScreen ---
-	vterm_screen_set_callbacks :: proc(screen: ^VTermScreen, callbacks: ^VTermScreenCallbacks, user: rawptr) ---
 	vterm_screen_reset :: proc(screen: ^VTermScreen, hard: c.int) ---
+	vterm_screen_set_callbacks :: proc(screen: ^VTermScreen, callbacks: ^VTermScreenCallbacks, user: rawptr) ---
 	vterm_screen_flush_damage :: proc(screen: ^VTermScreen) ---
 	vterm_screen_get_cell :: proc(screen: ^VTermScreen, pos: VTermPos, cell: ^VTermScreenCell) -> c.int ---
 	vterm_screen_convert_color_to_rgb :: proc(screen: ^VTermScreen, col: ^VTermColor) ---
