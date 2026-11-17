@@ -45,10 +45,9 @@ Terminal :: struct {
 on_vterm_output :: proc "c" (s: [^]u8, len: c.size_t, user: rawptr) {
 	context = runtime.default_context()
 
-	fmt.println("on_vterm_output: ", s[:len])
 	term := cast(^Terminal)user
 	if len > 0 {
-		fmt.println("on_vterm_output: ", s[:len])
+		fmt.println("on_vterm_output: ", string(s[:len]))
 		posix.write(posix.FD(term.pty_fd), s, uint(len))
 	}
 }
@@ -254,9 +253,13 @@ draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
 }
 
 render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
-		renderer := render_ctx.renderer
-		CELL_W := f32(render.font_w)
-		CELL_H := f32(render.font_h)
+	// Only redraw if there is new data.
+	if term.dirty do return
+	term.dirty = false
+
+	renderer := render_ctx.renderer
+	CELL_W := f32(render.font_w)
+	CELL_H := f32(render.font_h)
 
 	// 1. Draw the solid background rectangle for every cell first
 	//    (so wide glyphs or antialiasing don't bleed across cell borders)
@@ -292,6 +295,7 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 
 			// 2. Draw the glyph if the cell is not empty (`chars[0] == 0` means space/blank)
 			if cell.chars[0] != 0 {
+					fmt.println("cell:", cell.chars[0])
 				draw_glyph(render_ctx, rune(cell.chars[0]), px_x, px_y, fg, CELL_W, CELL_H)
 			}
 

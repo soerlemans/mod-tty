@@ -4,9 +4,13 @@ import "core:c"
 
 // FIXME: No Windows compilation at the moment.
 when ODIN_OS == .Windows {
-	foreign import libjanet "../../out/janet.lib"
+		foreign import libjanet {
+				"../../deps/build/janet.lib"
+		}
 } else when ODIN_OS == .Darwin || ODIN_OS == .Linux {
-	foreign import libjanet "../../out/janet.a"
+		foreign import libjanet {
+				"../../deps/build/libjanet.a"
+		}
 }
 
 // Janet's primary 64-bit tagged value type.

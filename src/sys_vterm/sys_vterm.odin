@@ -3,9 +3,14 @@ package vterm
 import "core:c"
 
 when ODIN_OS == .Linux || ODIN_OS == .Darwin {
-	foreign import libvterm "system:vterm"
+		foreign import libvterm {
+				"../../deps/build/libjanet.a"
+				"system:vterm"
+		}
 } else when ODIN_OS == .Windows {
-	foreign import libvterm "vterm.lib"
+		foreign import libvterm {
+				"vterm.lib"
+		}
 }
 
 VTermOutputCallback :: #type proc "c" (s: [^]u8, len: c.size_t, user: rawptr)
@@ -128,7 +133,7 @@ VTermColor :: struct #raw_union {
 
 VTermScreenCell :: struct {
 	chars: [VTERM_MAX_CHARS_PER_CELL]u32,
-	width: rune,
+	width: u8,
 	attrs: VTermScreenCellAttrs,
 	fg:    VTermColor,
 	bg:    VTermColor,
@@ -156,7 +161,8 @@ foreign libvterm {
 	vterm_set_utf8 :: proc(vt: ^VTerm, is_utf8: c.int) ---
 
 	// Input / Output
-	vterm_input_write :: proc(vt: ^VTerm, bytes: [^]u8, len: c.size_t) -> c.size_t ---
+	// vterm_input_write :: proc(vt: ^VTerm, bytes: [^]u8, len: c.size_t) -> c.size_t ---
+	vterm_input_write :: proc(vt: ^VTerm, bytes: rawptr, len: c.size_t) -> c.size_t ---
 	vterm_output_read :: proc(vt: ^VTerm, buffer: [^]u8, len: c.size_t) -> c.size_t ---
 	vterm_output_set_callback :: proc(vt: ^VTerm, func: VTermOutputCallback, user: rawptr) ---
 

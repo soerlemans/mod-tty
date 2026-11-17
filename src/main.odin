@@ -194,12 +194,18 @@ main :: proc() {
 
 		read_buf: [4096]u8
 		bytes_read := posix.read(master_fd, raw_data(read_buf[:]), len(read_buf))
-		if bytes_read > 0 {
-			output = strings.clone(string(read_buf[:bytes_read])) // Copy.
-			fmt.printf("output: %s\n", output)
+			if bytes_read > 0 {
 
-			// TODO: Figure out.
-			//vterm.vterm_write(vt, raw_data(read_buf[:bytes_read]), uint(bytes_read))
+			ptr: [10]u8 = {'T', 'E', 'S', 'T', '\r', '\n', 0, 0, 0, 0}
+			write_len := c.size_t(6)
+
+			// ptr := &read_buf[0]
+			// write_len := c.size_t(bytes_read)
+			// vterm.vterm_input_write(terminal.vt, ptr, write_len)
+
+			vterm.vterm_input_write(terminal.vt, &ptr[0], write_len)
+			// output = strings.clone(string(read_buf[:bytes_read])) // Copy.
+			// fmt.printf("output: %s\n", output)
 		} else if bytes_read == 0 {
 			// EOF: child closed the PTY.
 			running = false
@@ -219,6 +225,7 @@ main :: proc() {
 		if input_len > 0 {
 			user_str := string(input_buffer[:input_len])
 			render.render_string(&ctx, user_str, 4, 4, config.fg_color)
+			// vterm.vterm_input_write(terminal.vt, user_, c.size_t(input_len))
 		}
 
 		// TODO: Internal render is not loading???

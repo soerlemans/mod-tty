@@ -1,2 +1,4 @@
 brew install sdl3
 brew install sdl3_ttf
+
+# TODO: Also install libtool and libtool-bin for libvterm.
