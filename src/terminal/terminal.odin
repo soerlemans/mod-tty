@@ -267,7 +267,7 @@ draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
 
 render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 	// Only redraw if there is new data.
-	if term.dirty == false do return
+	// if term.dirty == false do return
 	term.dirty = false
 
 	renderer := render_ctx.renderer
@@ -304,7 +304,6 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 
 			// 2. Draw the glyph if the cell is not empty (`chars[0] == 0` means space/blank)
 			if cell.chars[0] != 0 {
-				fmt.println("cell:", cell.chars[0])
 				draw_glyph(render_ctx, rune(cell.chars[0]), px_x, px_y, fg, CELL_W, CELL_H)
 			}
 
@@ -321,15 +320,15 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 }
 
 terminal_free :: proc(term: ^Terminal) {
-		if term == nil do return
+	if term == nil do return
 
-    if term.vt != nil {
-        vterm.vterm_free(term.vt)
+	if term.vt != nil {
+		vterm.vterm_free(term.vt)
 
-        term.vt = nil
-        term.vt_state = nil
-        term.vt_screen = nil
-    }
+		term.vt = nil
+		term.vt_state = nil
+		term.vt_screen = nil
+	}
 
-    free(term)
+	free(term)
 }

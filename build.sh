@@ -6,4 +6,4 @@ cd "$(dirname "$0")"
 pwd
 
 ./deps.sh
-odin build src -out:modtty
+odin build src -debug -out:modtty
