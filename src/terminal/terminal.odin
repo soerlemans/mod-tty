@@ -267,7 +267,7 @@ draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
 
 render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 	// Only redraw if there is new data.
-	if term.dirty do return
+	if term.dirty == false do return
 	term.dirty = false
 
 	renderer := render_ctx.renderer
