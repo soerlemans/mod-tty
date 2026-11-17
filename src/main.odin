@@ -90,12 +90,12 @@ main :: proc() {
 	defer posix.close(master_fd)
 
 	// Libvterm setup
-	terminal, state := term.init(master_fd, rows, cols)
+	terminal, state := term.terminal_init(master_fd, rows, cols)
 	if state != .OK {
 		fmt.println("Failed to init Terminal!")
 		return
 	}
-	defer term.free(terminal)
+	defer term.terminal_free(terminal)
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {

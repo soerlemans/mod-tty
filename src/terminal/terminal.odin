@@ -181,7 +181,7 @@ VTERM_CALLBACKS := vterm.VTermScreenCallbacks {
 	sb_clear    = on_sb_clear,
 }
 
-init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
+terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
 	term := new(Terminal)
 
 	// Init members.
@@ -320,8 +320,16 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 	}
 }
 
-free :: proc(term: ^Terminal) {
-	vterm.vterm_free(term.vt)
+terminal_free :: proc(term: ^Terminal) {
+		if term == nil do return
 
-	free(term)
+    if term.vt != nil {
+        vterm.vterm_free(term.vt)
+
+        term.vt = nil
+        term.vt_state = nil
+        term.vt_screen = nil
+    }
+
+    free(term)
 }
