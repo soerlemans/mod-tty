@@ -12,11 +12,11 @@ import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
 import ap "app_config"
+import plibc "posix_libc"
 import render "render"
 import u "sys_util"
 import vterm "sys_vterm"
 import term "terminal"
-import plibc "posix_libc"
 
 FpsContext :: struct {
 	fps:         f32,
@@ -181,7 +181,7 @@ main :: proc() {
 
 	fds := [1]posix.pollfd{{fd = master_fd, events = {.IN}}}
 	running := true
-	input_buffer: [256]u8
+	input_buffer: [4096]u8
 	input_len: int = 0
 	for running {
 		update_fps(&fps_ctx)

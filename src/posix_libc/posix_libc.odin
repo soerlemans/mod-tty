@@ -5,12 +5,12 @@ import "core:sys/posix"
 
 // Very much a hack.
 when ODIN_OS == .Linux {
-    TIOCSWINSZ :: 0x5414
+	TIOCSWINSZ :: 0x5414
 } else when ODIN_OS == .Darwin {
-    // macOS (BSD-derived ioctl value)
-    TIOCSWINSZ :: 0x80087468
+	// macOS (BSD-derived ioctl value)
+	TIOCSWINSZ :: 0x80087468
 } else {
-    #panic("Unsupported platform for PTY window resizing")
+	#panic("Unsupported platform for PTY window resizing")
 }
 
 foreign import plibc "system:c"
@@ -24,5 +24,5 @@ winsize :: struct {
 
 @(default_calling_convention = "c")
 foreign plibc {
-    ioctl :: proc(fd: i32, request: u32, ws: ^winsize) -> i32 ---
+	ioctl :: proc(fd: i32, request: u32, ws: ^winsize) -> i32 ---
 }
