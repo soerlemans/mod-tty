@@ -181,8 +181,6 @@ main :: proc() {
 
 	fds := [1]posix.pollfd{{fd = master_fd, events = {.IN}}}
 	running := true
-	input_buffer: [4096]u8
-	input_len: int = 0
 	for running {
 		update_fps(&fps_ctx)
 
@@ -221,27 +219,79 @@ main :: proc() {
 				running = false
 
 			case .KEY_DOWN:
-				if event.key.key == sdl.K_BACKSPACE && input_len > 0 {
-					vterm.vterm_keyboard_key(terminal.vt, .ENTER, .NONE)
-					input_len -= 1
-				} else if event.key.key == sdl.K_RETURN {
-					fmt.println("Sending command:", string(input_buffer[:input_len]))
-					input_buffer[input_len] = '\r'
-					input_len += 1
-					// posix.write(master_fd, raw_data(input_buffer[:input_len]), uint(input_len))
-					vterm.vterm_keyboard_key(terminal.vt, .ENTER, .NONE)
-					input_len = 0
+				// TODO: Move to function.
+				kmod: vterm.VTermModifier = .NONE
+				is_ctrl := (event.key.mod & (sdl.KMOD_LCTRL | sdl.KMOD_RCTRL)) != {}
+				if is_ctrl {
+					kmod |= .CTRL
 				}
-			case .TEXT_INPUT:
-				text_bytes := string(event.text.text)
-				for i in 0 ..< len(text_bytes) {
-					if input_len < len(input_buffer) {
-						input_buffer[input_len] = text_bytes[i]
-						input_len += 1
 
-						// FIXME: For now just send byte per byte as its the most simple (but very inefficient).
-						vterm.vterm_keyboard_unichar(terminal.vt, u32(text_bytes[i]), .NONE)
+				is_shift := (event.key.mod & (sdl.KMOD_LSHIFT | sdl.KMOD_RSHIFT)) != {}
+				if is_shift {
+					kmod |= .SHIFT
+				}
+
+				is_alt := (event.key.mod & (sdl.KMOD_LALT | sdl.KMOD_RALT)) != {}
+				if is_alt {
+					kmod |= .ALT
+				}
+
+				switch event.key.key {
+				case sdl.K_RETURN:
+					vterm.vterm_keyboard_key(terminal.vt, .ENTER, kmod)
+
+				case sdl.K_BACKSPACE:
+					vterm.vterm_keyboard_key(terminal.vt, .BACKSPACE, kmod)
+
+				case sdl.K_TAB:
+					vterm.vterm_keyboard_key(terminal.vt, .TAB, kmod)
+
+				case sdl.K_ESCAPE:
+					vterm.vterm_keyboard_key(terminal.vt, .ESCAPE, kmod)
+
+				case sdl.K_UP:
+					vterm.vterm_keyboard_key(terminal.vt, .UP, kmod)
+
+				case sdl.K_DOWN:
+					vterm.vterm_keyboard_key(terminal.vt, .DOWN, kmod)
+
+				case sdl.K_LEFT:
+					vterm.vterm_keyboard_key(terminal.vt, .LEFT, kmod)
+
+				case sdl.K_RIGHT:
+					vterm.vterm_keyboard_key(terminal.vt, .RIGHT, kmod)
+
+				case sdl.K_INSERT:
+					vterm.vterm_keyboard_key(terminal.vt, .INS, kmod)
+
+				case sdl.K_DELETE:
+					vterm.vterm_keyboard_key(terminal.vt, .DEL, kmod)
+
+				case sdl.K_HOME:
+					vterm.vterm_keyboard_key(terminal.vt, .HOME, kmod)
+
+				case sdl.K_END:
+					vterm.vterm_keyboard_key(terminal.vt, .END, kmod)
+
+				case sdl.K_PAGEUP:
+					vterm.vterm_keyboard_key(terminal.vt, .PAGEUP, kmod)
+
+				case sdl.K_PAGEDOWN:
+					vterm.vterm_keyboard_key(terminal.vt, .PAGEDOWN, kmod)
+
+				case:
+					// Default.
+					if kmod != .NONE {
+						// SDL Keytypes map to ASCII table.
+						vterm.vterm_keyboard_unichar(terminal.vt, u32(event.key.key), kmod)
+						terminal.dirty = true
 					}
+				}
+
+			case .TEXT_INPUT:
+				text_ptr := event.text.text
+				for r in string(text_ptr) {
+					vterm.vterm_keyboard_unichar(terminal.vt, u32(r), .NONE)
 				}
 
 			case .WINDOW_RESIZED:
