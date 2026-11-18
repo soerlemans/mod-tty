@@ -129,6 +129,7 @@ on_sb_pushline :: proc "c" (cols: c.int, cells: [^]vterm.VTermScreenCell, user: 
 	context = runtime.default_context()
 
 	line_copy := slice.clone(cells[:cols])
+	fmt.printf("scrlb: %d max: %d", len(term.scrollback), term.max_scrollback)
 	if len(term.scrollback) >= term.max_scrollback {
 		delete(term.scrollback[0].cells)
 		ordered_remove(&term.scrollback, 0) // In production, use a ring buffer instead of shifting
@@ -187,7 +188,8 @@ terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, Terminal
 	// Init members.
 	term.pty_fd = pty_fd
 	term.rows = rows
-	term.cols = cols
+		term.cols = cols
+		term.max_scrollback = 10000
 
 	term.vt = vterm.vterm_new(rows, cols)
 	if term.vt == nil do return nil, .FAIL
