@@ -191,38 +191,13 @@ main :: proc() {
 
 	// Event loop.
 	fps_ctx := FpsContext{60.0, 0, sdl.GetTicks()}
-
-	fds := [1]posix.pollfd{{fd = master_fd, events = {.IN}}}
-	running := true
-	for running {
+	for running := true; running; {
 		update_fps(&fps_ctx)
 
-		read_buf: [4096]u8
-		ret := posix.poll(&fds[0], 1, 16)
-		if ret > 0 && .IN in fds[0].revents {
-			bytes_read := posix.read(master_fd, raw_data(read_buf[:]), len(read_buf))
-			if bytes_read > 0 {
-				ptr := &read_buf[0]
-				write_len := c.size_t(bytes_read)
-				vterm.vterm_input_write(terminal.vt, ptr, write_len)
-			} else if bytes_read == 0 {
-				// EOF: child closed the PTY.
-				running = false
-			} else {
-				// n == -1: check errno.
-				err := posix.errno()
-				if !(err == .EAGAIN || err == .EWOULDBLOCK) {
-					// EIO (child exited on Linux) or another real error
-					libc.perror("Error.")
-					running = false
-				}
-			}
-		} else if ret < 0 {
-			err := posix.errno()
-			if !(err == .EAGAIN || err == .EWOULDBLOCK) {
-				libc.perror("Poll error")
-				running = false
-			}
+		// Poll if there is new input from PTY.
+		if term.poll_terminal(terminal) != .OK {
+			fmt.println("Polling error")
+			break
 		}
 
 		event: sdl.Event

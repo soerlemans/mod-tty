@@ -2,6 +2,7 @@ package terminal
 
 import "base:runtime"
 import "core:c"
+import "core:c/libc"
 import "core:fmt"
 import "core:slice"
 import "core:sys/posix"
@@ -12,9 +13,18 @@ import ttf "vendor:sdl3/ttf"
 import render "../render"
 import vterm "../sys_vterm"
 
+READ_BUF_SIZE :: 4096
+
 TerminalStatus :: enum {
 	OK,
 	FAIL,
+}
+
+
+PollStatus :: enum {
+	OK,
+	PTY_EOF,
+	PTY_ERROR,
 }
 
 // Scrollback line stored in your own ring buffer
@@ -27,6 +37,8 @@ Terminal :: struct {
 	vt_state:       ^vterm.VTermState,
 	vt_screen:      ^vterm.VTermScreen,
 	pty_fd:         posix.FD,
+	read_buf:       [READ_BUF_SIZE]u8,
+	poll_fds:       [1]posix.pollfd,
 	rows:           c.int,
 	cols:           c.int,
 
@@ -48,10 +60,6 @@ on_vterm_output :: proc "c" (s: [^]u8, len: c.size_t, user: rawptr) {
 
 	term := cast(^Terminal)user
 	if len > 0 {
-		fmt.println("on_vterm_output: ", string(s[:len]))
-		bytes := transmute([]byte)string(s[:len])
-		fmt.printf("on_vterm_output raw: %v\n", bytes)
-
 		posix.write(posix.FD(term.pty_fd), s, uint(len))
 	}
 }
@@ -189,9 +197,11 @@ terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, Terminal
 
 	// Init members.
 	term.pty_fd = pty_fd
+	term.poll_fds = [1]posix.pollfd{{fd = pty_fd, events = {.IN}}}
 	term.rows = rows
 	term.cols = cols
 	term.max_scrollback = 10000
+
 
 	term.vt = vterm.vterm_new(rows, cols)
 	if term.vt == nil do return nil, .FAIL
@@ -267,6 +277,35 @@ draw_cursor :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32) {
 		h = h,
 	}
 	sdl.RenderFillRect(renderer, &rect)
+}
+
+poll_terminal :: proc(term: ^Terminal) -> PollStatus {
+	WAIT_MS :: 20
+
+	fds_ptr := &term.poll_fds[0]
+	ret := posix.poll(fds_ptr, 1, WAIT_MS) // Wait for a maximum of 20ms.
+
+	if ret > 0 && .IN in term.poll_fds[0].revents {
+		raw_ptr := raw_data(term.read_buf[:])
+
+		bytes_read := posix.read(term.pty_fd, raw_ptr, READ_BUF_SIZE)
+		if bytes_read > 0 {
+			write_len := c.size_t(bytes_read)
+			vterm.vterm_input_write(term.vt, raw_ptr, write_len)
+		} else if bytes_read == 0 {
+			// EOF: child closed the PTY.
+			return .PTY_EOF
+		} else {
+			// n == -1: check errno.
+			err := posix.errno()
+			if !(err == .EAGAIN || err == .EWOULDBLOCK) {
+				libc.perror("Error in poll_terminal.")
+				return .PTY_ERROR
+			}
+		}
+	}
+
+	return .OK
 }
 
 render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
