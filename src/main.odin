@@ -1,5 +1,6 @@
 package main
 
+import "core:log"
 import "core:c"
 import "core:c/libc"
 import "core:fmt"
@@ -16,7 +17,7 @@ import plibc "posix_libc"
 import render "render"
 import u "sys_util"
 import vterm "sys_vterm"
-import term "terminal"
+import tty "tty"
 
 FpsContext :: struct {
 	fps:         f32,
@@ -87,7 +88,7 @@ pty_init :: proc() -> posix.FD {
 
 resize_terminal :: proc(
 	master_fd: posix.FD,
-	terminal: ^term.Terminal,
+	terminal: ^tty.Terminal,
 	win_w, win_h, font_w, font_h: f32,
 	config: ^ap.AppConfig,
 ) {
@@ -125,6 +126,12 @@ is_modifier_key :: proc(key: sdl.Keycode) -> bool {
 }
 
 main :: proc() {
+log_level: log.Level = .Debug when ODIN_DEBUG else .Info
+    context.logger = log.create_console_logger(log_level)
+   defer log.destroy_console_logger(context.logger)
+
+	log.debug("Running in -debug build")
+
 	cols, rows: i32 = 80, 30
 
 	// Initialize Janet VM, and load configuration.
@@ -144,12 +151,12 @@ main :: proc() {
 	defer posix.close(master_fd)
 
 	// Libvterm setup
-	terminal, state := term.terminal_init(master_fd, rows, cols)
+	terminal, state := tty.terminal_init(master_fd, rows, cols)
 	if state != .OK {
 		fmt.println("Failed to init Terminal!")
 		return
 	}
-	defer term.terminal_free(terminal)
+	defer tty.terminal_free(terminal)
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
@@ -195,7 +202,7 @@ main :: proc() {
 		update_fps(&fps_ctx)
 
 		// Poll if there is new input from PTY.
-		if term.poll_terminal(terminal) != .OK {
+		if tty.poll_terminal(terminal) != .OK {
 			fmt.println("Polling error")
 			break
 		}
@@ -314,7 +321,7 @@ main :: proc() {
 		)
 		sdl.RenderClear(renderer)
 
-		term.render_terminal(terminal, &ctx)
+		tty.render_terminal(terminal, &ctx)
 		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), &config, fps_ctx.fps)
 
 		sdl.RenderPresent(renderer)

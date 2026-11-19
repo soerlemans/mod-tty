@@ -1,4 +1,4 @@
-package terminal
+package tty
 
 import "base:runtime"
 import "core:c"
