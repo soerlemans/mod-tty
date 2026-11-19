@@ -49,6 +49,9 @@ on_vterm_output :: proc "c" (s: [^]u8, len: c.size_t, user: rawptr) {
 	term := cast(^Terminal)user
 	if len > 0 {
 		fmt.println("on_vterm_output: ", string(s[:len]))
+		bytes := transmute([]byte)string(s[:len])
+		fmt.printf("on_vterm_output raw: %v\n", bytes)
+
 		posix.write(posix.FD(term.pty_fd), s, uint(len))
 	}
 }

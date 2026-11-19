@@ -37,11 +37,11 @@ update_fps :: proc(ctx: ^FpsContext) {
 shell_process :: proc() {
 	posix.setenv("TERM", "xterm-256color", true)
 	term := libc.getenv("TERM")
-	// shell := libc.getenv("SHELL")
+	shell := libc.getenv("SHELL")
 
 	// Easier to debug then ZSH for now.
-	posix.setenv("PS1", "~ ", true)
-	shell := cstring("/bin/sh")
+	// posix.setenv("PS1", "~ ", true)
+	// shell = cstring("/bin/sh")
 	if len(shell) == 0 {
 		shell = cstring("/bin/sh")
 	}
@@ -109,6 +109,19 @@ resize_terminal :: proc(
 		ws_ypixel = u16(win_h),
 	}
 	plibc.ioctl(i32(master_fd), plibc.TIOCSWINSZ, &ws)
+}
+
+is_modifier_key :: proc(key: sdl.Keycode) -> bool {
+	return(
+		key == sdl.K_LCTRL ||
+		key == sdl.K_RCTRL ||
+		key == sdl.K_LSHIFT ||
+		key == sdl.K_RSHIFT ||
+		key == sdl.K_LALT ||
+		key == sdl.K_RALT ||
+		key == sdl.K_LGUI ||
+		key == sdl.K_RGUI \
+	)
 }
 
 main :: proc() {
@@ -219,6 +232,9 @@ main :: proc() {
 				running = false
 
 			case .KEY_DOWN:
+				// If only a modifier was pressed just ignore.
+				if is_modifier_key(event.key.key) do break
+
 				// TODO: Move to function.
 				kmod: vterm.VTermModifier = .NONE
 				is_ctrl := (event.key.mod & (sdl.KMOD_LCTRL | sdl.KMOD_RCTRL)) != {}
@@ -237,6 +253,7 @@ main :: proc() {
 				}
 
 				switch event.key.key {
+				// TODO: Clean up.
 				case sdl.K_RETURN:
 					vterm.vterm_keyboard_key(terminal.vt, .ENTER, kmod)
 
@@ -280,8 +297,9 @@ main :: proc() {
 					vterm.vterm_keyboard_key(terminal.vt, .PAGEDOWN, kmod)
 
 				case:
-					// Default.
-					if kmod != .NONE {
+					// Ignore empty modifiers and if only a shift is present.
+					// As we have capitalization be handled by .TEXT_INPUT case.
+					if kmod != .NONE && (kmod & (.SHIFT)) == .NONE {
 						// SDL Keytypes map to ASCII table.
 						vterm.vterm_keyboard_unichar(terminal.vt, u32(event.key.key), kmod)
 						terminal.dirty = true
