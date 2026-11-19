@@ -1,6 +1,7 @@
 package app_config
 
 import "core:c"
+import "core:log"
 import "core:c/libc"
 import "core:fmt"
 import "core:os"
@@ -35,7 +36,7 @@ load_app_config :: proc(env: ^j.JanetTable, filename: string) -> AppConfig {
 
 	file_data, err := os.read_entire_file(filename, context.allocator)
 	if err != nil {
-		fmt.eprintln("%s not found. Using default config.", filename)
+		log.warn("%s not found. Using default config!", filename)
 		return cfg
 	}
 	defer delete(file_data)
@@ -53,14 +54,14 @@ load_app_config :: proc(env: ^j.JanetTable, filename: string) -> AppConfig {
 				// Ensure it's a valid number before unwrapping integer
 				if spacer_val != 0 {
 					cfg.spacer_height = f32(j.janet_unwrap_integer(spacer_val))
-					fmt.eprintln("Spacer heigh: ", cfg.spacer_height)
+					log.infof("Spacer heigh: %v", cfg.spacer_height)
 				}
 			}
 		} else {
-			fmt.eprintln("Warning: Unhandled janet type", type_kind)
+			log.warnf("Unhandled janet type %d.", type_kind)
 		}
 	} else {
-		fmt.eprintln("Error evaluating init.janet script.")
+		log.error("Error evaluating init.janet script!")
 	}
 
 	return cfg

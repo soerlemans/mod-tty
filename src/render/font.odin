@@ -1,5 +1,6 @@
 package render
 
+import "core:log"
 import "core:fmt"
 import "core:math"
 import "core:os"
@@ -34,7 +35,7 @@ get_mono_cell_size :: proc(font: ^ttf.Font) -> (cell_w: f32, cell_h: f32) {
 load_font :: proc() -> ^ttf.Font {
 	font := ttf.OpenFont(FONT_SYSTEM_DEFAULT, FONT_SIZE)
 	if font == nil {
-		sdl3.Log("Could not load font: %s (%s)", FONT_SYSTEM_DEFAULT, sdl3.GetError())
+		log.error("Could not load font: %s (%s)", FONT_SYSTEM_DEFAULT, sdl3.GetError())
 		os.exit(1)
 	}
 
@@ -42,7 +43,7 @@ load_font :: proc() -> ^ttf.Font {
 	font_w = i32(math.ceil_f32(glyph_w))
 	font_h = i32(math.ceil_f32(glyph_h))
 
-	fmt.printf("Cell dimensions %dx%d\n", font_w, font_h)
+	log.info("Cell dimensions %dx%d", font_w, font_h)
 
 	return font
 }

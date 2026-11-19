@@ -126,13 +126,11 @@ is_modifier_key :: proc(key: sdl.Keycode) -> bool {
 }
 
 main :: proc() {
-log_level: log.Level = .Debug when ODIN_DEBUG else .Info
-    context.logger = log.create_console_logger(log_level)
-   defer log.destroy_console_logger(context.logger)
+	log_level: log.Level = .Debug when ODIN_DEBUG else .Info
+  context.logger = log.create_console_logger(log_level)
+  defer log.destroy_console_logger(context.logger)
 
-	log.debug("Running in -debug build")
-
-	cols, rows: i32 = 80, 30
+	log.debug("DEBUG logging enabled!")
 
 	// Initialize Janet VM, and load configuration.
 	j.janet_init()
@@ -144,13 +142,14 @@ log_level: log.Level = .Debug when ODIN_DEBUG else .Info
 	// For now we pick 800x600 as default size.
 	win_w := i32(800)
 	win_h := i32(600)
-	fmt.printf("WinDim: %dx%d\n", win_w, win_h)
+	log.debugf("WinDim: %dx%d", win_w, win_h)
 
 	// PTY setup.
 	master_fd := pty_init()
 	defer posix.close(master_fd)
 
 	// Libvterm setup
+	cols, rows: i32 = 80, 24 // Defaults.
 	terminal, state := tty.terminal_init(master_fd, rows, cols)
 	if state != .OK {
 		fmt.println("Failed to init Terminal!")
