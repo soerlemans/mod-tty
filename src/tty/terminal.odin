@@ -404,7 +404,6 @@ override_indexed_color :: proc(vc: ^vterm.VTermColor, prefs: ^t.Preferences) {
 	if tag_idx == u8(vterm.VTermColorType.VTERM_COLOR_INDEXED) {
 		if vc.indexed.idx < len(t.AnsiColors) {
 			ansi_idx := t.AnsiColors(vc.indexed.idx)
-			fmt.eprintf("AnsiColor: %v\n", ansi_idx)
 			color := &prefs.ansi_colors[ansi_idx]
 
 			// Change union from indexed color to RGB color.
