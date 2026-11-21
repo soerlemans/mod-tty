@@ -11,5 +11,5 @@
 # 	)
 
 # Defaults:
-(set-font-size 18)
+(set-font-size 15)
 (set-hyper-buffer-height 24)

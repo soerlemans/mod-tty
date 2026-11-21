@@ -1,8 +1,8 @@
 package janet
 
+import "base:runtime"
 import "core:log"
 import "core:os"
-import "base:runtime"
 import "core:strings"
 
 import t "../types"
@@ -55,9 +55,9 @@ init_scripting :: proc(prefs: ^t.Preferences) {
 
 	env := janet_core_env(nil)
 	if env == nil {
-   log.errorf("Failed to create Janet core environment")
-   janet_deinit()
-   os.exit(1)
+		log.errorf("Failed to create Janet core environment")
+		janet_deinit()
+		os.exit(1)
 	}
 
 	// Pin env so that its always referable.

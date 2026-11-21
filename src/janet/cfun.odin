@@ -35,13 +35,13 @@ cfun_set_font_size :: proc "c" (argc: i32, argv: [^]Janet) -> Janet {
 	janet_fixarity(argc, 1)
 
 	args := ([^]Janet)(argv)
-	size := janet_unwrap_integer(argv[0])
-	if size < 6 || size > 96 {
+	size := janet_unwrap_number(argv[0])
+	if size < 3.0 || size > 96.0 {
 		janet_panicf("Font size out of range: %g", size)
 	}
 
 	prefs := janet_obtain_preferences()
-	prefs.font_size = int(size)
+	prefs.font_size = f32(size)
 	log.debug("Config set font_size =", prefs.font_size)
 
 	return janet_wrap_nil()
@@ -71,5 +71,10 @@ register_cfuns :: proc(env: ^JanetTable) {
 	janet_def(env, "set-font-size", fn_val, "(set-font-size n)\n\nSet terminal font size.")
 
 	fn_val = janet_wrap_cfunction(cfun_set_hyper_buffer_height)
-	janet_def(env, "set-hyper-buffer-height", fn_val, "(set-hyper-buffer-height n)\n\nSet height of the hyper buffer.")
+	janet_def(
+		env,
+		"set-hyper-buffer-height",
+		fn_val,
+		"(set-hyper-buffer-height n)\n\nSet height of the hyper buffer.",
+	)
 }

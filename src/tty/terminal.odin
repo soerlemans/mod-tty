@@ -4,6 +4,8 @@ import "base:runtime"
 import "core:c"
 import "core:c/libc"
 import "core:fmt"
+import "core:log"
+import "core:os"
 import "core:slice"
 import "core:sys/posix"
 
@@ -11,10 +13,11 @@ import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
 import j "../janet"
+import plibc "../posix_libc"
 import render "../render"
+import u "../sys_util"
 import vterm "../sys_vterm"
 import t "../types"
-import plibc "../posix_libc"
 
 READ_BUF_SIZE :: 4096
 
@@ -195,12 +198,72 @@ VTERM_CALLBACKS := vterm.VTermScreenCallbacks {
 	sb_clear    = on_sb_clear,
 }
 
-terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, TerminalStatus) {
+shell_process :: proc() {
+	posix.setenv("TERM", "xterm-256color", true)
+	term := libc.getenv("TERM")
+	shell := libc.getenv("SHELL")
+
+	// Easier to debug then ZSH for now.
+	// posix.setenv("PS1", "~ ", true)
+	// shell = cstring("/bin/sh")
+	if len(shell) == 0 {
+		shell = cstring("/bin/sh")
+	}
+
+	// TODO: Have this log back to master pid_t somehow.
+	log.infof("TERM=%s", term)
+	log.infof("SHELL=%s", shell)
+	fmt.println("Welcome to Hyper term.")
+
+	res := posix.execlp(shell, shell, nil)
+	if res == -1 {
+		libc.perror("execlp")
+		os.exit(int(res))
+	}
+	os.exit(0)
+}
+
+pty_init :: proc(rows, cols: i32) -> posix.FD {
+	// PTY setup.
+	pty_fd: posix.FD = -1
+	ws := u.winsize {
+		ws_row    = u16(rows),
+		ws_col    = u16(cols),
+		ws_xpixel = 0,
+		ws_ypixel = 0,
+	}
+	pid := u.forkpty(&pty_fd, nil, nil, &ws)
+	if pid < 0 {
+		libc.perror("Failed to open PTY")
+		os.exit(0)
+	}
+
+	// Child process flow launches shell.
+	if pid == 0 {
+		shell_process()
+	}
+
+	// Set master PTY non-blocking so we can poll it cleanly in the UI loop
+	flags := posix.fcntl(pty_fd, .GETFL, 0)
+
+	O_NONBLOCK := transmute(c.int)posix.O_Flags{.NONBLOCK}
+	posix.fcntl(pty_fd, .SETFL, flags | O_NONBLOCK, 0)
+
+	return pty_fd
+}
+
+terminal_init :: proc(rows, cols: i32) -> (^Terminal, TerminalStatus) {
 	term := new(Terminal)
 
+	pfd := pty_init(rows, cols)
+	if pfd < 0 {
+		free(term)
+		log.errorf("Failed to init PTY: %d", pfd)
+		os.exit(1)
+	}
 	// Init members.
-	term.pty_fd = pty_fd
-	term.poll_fds = [1]posix.pollfd{{fd = pty_fd, events = {.IN}}}
+	term.pty_fd = pfd
+	term.poll_fds = [1]posix.pollfd{{fd = pfd, events = {.IN}}}
 	term.rows = rows
 	term.cols = cols
 	term.max_scrollback = 10000
@@ -225,11 +288,7 @@ terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, Terminal
 	return term, .OK
 }
 
-resize_terminal :: proc(
-	term: ^Terminal,
-	win_w, win_h, font_w, font_h: f32,
-	pref: ^t.Preferences,
-) {
+resize_terminal :: proc(term: ^Terminal, win_w, win_h, font_w, font_h: f32, pref: ^t.Preferences) {
 	available_h := win_h - pref.spacer_height
 	cols := int(win_w / font_w)
 	rows := int(available_h / font_h)
@@ -337,7 +396,48 @@ poll_terminal :: proc(term: ^Terminal) -> PollStatus {
 	return .OK
 }
 
-render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
+// Indexed colors are changeable by
+override_indexed_color :: proc(vc: ^vterm.VTermColor, prefs: ^t.Preferences) {
+	// Default background color is completely black RGB(0, 0, 0).
+	// So if that is the case we override it with our preferences set background color.
+	tag_idx := (vc.type & u8(vterm.VTermColorType.VTERM_COLOR_TYPE_MASK))
+	if tag_idx == u8(vterm.VTermColorType.VTERM_COLOR_INDEXED) {
+		if vc.indexed.idx < len(t.AnsiColors) {
+			ansi_idx := t.AnsiColors(vc.indexed.idx)
+			fmt.eprintf("AnsiColor: %v\n", ansi_idx)
+			color := &prefs.ansi_colors[ansi_idx]
+
+			// Change union from indexed color to RGB color.
+			vc.rgb.type =
+				(vc.type & ~u8(vterm.VTermColorType.VTERM_COLOR_TYPE_MASK)) |
+				u8(vterm.VTermColorType.VTERM_COLOR_RGB)
+			vc.rgb.red = color.r
+			vc.rgb.green = color.g
+			vc.rgb.blue = color.b
+		}
+	}
+}
+
+override_bg_color :: proc(vc_bg: ^vterm.VTermColor, prefs: ^t.Preferences) {
+	// Default background color is completely black RGB(0, 0, 0).
+	// So if that is the case we override it with our preferences set background color.
+	tag_idx := (vc_bg.type & u8(vterm.VTermColorType.VTERM_COLOR_TYPE_MASK))
+	if tag_idx == u8(vterm.VTermColorType.VTERM_COLOR_RGB) {
+		if vc_bg.rgb.red == 0 && vc_bg.rgb.green == 0 && vc_bg.rgb.blue == 0 {
+			vc_bg.rgb.red = prefs.bg_color.r
+			vc_bg.rgb.green = prefs.bg_color.g
+			vc_bg.rgb.blue = prefs.bg_color.b
+		}
+	} else {
+		override_indexed_color(vc_bg, prefs)
+	}
+}
+
+render_terminal :: proc(
+	term: ^Terminal,
+	render_ctx: ^render.RenderContext,
+	prefs: ^t.Preferences,
+) {
 	// Only redraw if there is new data.
 	// if term.dirty == false do return
 	term.dirty = false
@@ -357,6 +457,10 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 				col = col,
 			}
 			vterm.vterm_screen_get_cell(term.vt_screen, cell_pos, &cell)
+
+			// Enforce our set background color
+			override_indexed_color(&cell.fg, prefs)
+			override_bg_color(&cell.bg, prefs)
 
 			// Convert indexed/default colors into concrete RGB
 			vterm.vterm_screen_convert_color_to_rgb(term.vt_screen, &cell.fg)
@@ -383,7 +487,6 @@ render_terminal :: proc(term: ^Terminal, render_ctx: ^render.RenderContext) {
 		}
 	}
 
-	// 3. Draw the cursor on top at `term.cursor_pos`
 	if term.cursor_visible {
 		cx := f32(term.cursor_pos.col) * CELL_W
 		cy := f32(term.cursor_pos.row) * CELL_H
@@ -400,6 +503,10 @@ terminal_free :: proc(term: ^Terminal) {
 		term.vt = nil
 		term.vt_state = nil
 		term.vt_screen = nil
+	}
+
+	if term.pty_fd > -1 {
+		posix.close(term.pty_fd)
 	}
 
 	free(term)

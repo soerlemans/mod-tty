@@ -38,29 +38,22 @@ render_text_string :: proc(ctx: ^RenderContext, text: string, x, y: f32, color: 
 	sdl.RenderTexture(ctx.renderer, texture, nil, &dst_rect)
 }
 
-render_string :: proc(ctx: ^RenderContext, text: string, col, row: f32, color: sdl.FColor) {
-	byte_color: sdl.Color
-	byte_color.r = u8(color.r * 255)
-	byte_color.g = u8(color.g * 255)
-	byte_color.b = u8(color.b * 255)
-	byte_color.a = u8(color.a * 255)
-
-
+render_string :: proc(ctx: ^RenderContext, text: string, col, row: f32, color: sdl.Color) {
 	x := col * f32(font_w)
 	y := row * f32(font_h)
 
-	render_text_string(ctx, text, x, y, byte_color)
+	render_text_string(ctx, text, x, y, color)
 }
 
 render_spacer_bar :: proc(ctx: ^RenderContext, win_h, win_w: f32, pref: ^t.Preferences, fps: f32) {
 	// Diagnostic spacer bar.
 	spacer_rect := sdl.FRect{0, f32(win_h) - pref.spacer_height, f32(win_w), pref.spacer_height}
-	sdl.SetRenderDrawColorFloat(
+	sdl.SetRenderDrawColor(
 		ctx.renderer,
-		pref.spacer_color.r,
-		pref.spacer_color.g,
-		pref.spacer_color.b,
-		1.0,
+		pref.spacer_bg.r,
+		pref.spacer_bg.g,
+		pref.spacer_bg.b,
+		pref.spacer_bg.a,
 	)
 	sdl.RenderFillRect(ctx.renderer, &spacer_rect)
 
@@ -70,5 +63,5 @@ render_spacer_bar :: proc(ctx: ^RenderContext, win_h, win_w: f32, pref: ^t.Prefe
 		fps,
 		pref.spacer_height,
 	)
-	render_string(ctx, diag_text, 1, y, pref.accent_color)
+	render_string(ctx, diag_text, 1, y, pref.spacer_fg)
 }

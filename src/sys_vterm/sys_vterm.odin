@@ -41,6 +41,45 @@ VTermValueType :: enum {
 	N_VALUETYPES,
 }
 
+VTermColorType :: enum u8 {
+  /**
+   * If the lower bit of `type` is not set, the colour is 24-bit RGB.
+   */
+  VTERM_COLOR_RGB = 0x00,
+
+  /**
+   * The colour is an index into a palette of 256 colours.
+   */
+  VTERM_COLOR_INDEXED = 0x01,
+
+  /**
+   * Mask that can be used to extract the RGB/Indexed bit.
+   */
+  VTERM_COLOR_TYPE_MASK = 0x01,
+
+  /**
+   * If set, indicates that this colour should be the default foreground
+   * color, i.e. there was no SGR request for another colour. When
+   * rendering this colour it is possible to ignore "idx" and just use a
+   * colour that is not in the palette.
+   */
+  VTERM_COLOR_DEFAULT_FG = 0x02,
+
+  /**
+   * If set, indicates that this colour should be the default background
+   * color, i.e. there was no SGR request for another colour. A common
+   * option when rendering this colour is to not render a background at
+   * all, for example by rendering the window transparently at this spot.
+   */
+  VTERM_COLOR_DEFAULT_BG = 0x04,
+
+  /**
+   * Mask that can be used to extract the default foreground/background bit.
+   */
+  VTERM_COLOR_DEFAULT_MASK = 0x06
+}
+
+
 VTermModifier :: enum c.int {
 	NONE  = 0x00,
 	SHIFT = 0x01,

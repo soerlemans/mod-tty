@@ -35,57 +35,6 @@ update_fps :: proc(ctx: ^FpsContext) {
 	}
 }
 
-shell_process :: proc() {
-	posix.setenv("TERM", "xterm-256color", true)
-	term := libc.getenv("TERM")
-	shell := libc.getenv("SHELL")
-
-	// Easier to debug then ZSH for now.
-	// posix.setenv("PS1", "~ ", true)
-	// shell = cstring("/bin/sh")
-	if len(shell) == 0 {
-		shell = cstring("/bin/sh")
-	}
-
-	// TODO: Have this log back to master pid_t somehow.
-	fmt.println("TERM=", term)
-	fmt.println("SHELL=", shell)
-
-	posix.execlp(shell, shell, nil)
-	libc.perror("execlp")
-	os.exit(1)
-}
-
-pty_init :: proc() -> posix.FD {
-	// PTY setup.
-	master_fd: posix.FD = 0
-	// TODO: Update dynamically.
-	ws := u.winsize {
-		ws_row    = 24,
-		ws_col    = 80,
-		ws_xpixel = 0,
-		ws_ypixel = 0,
-	}
-	pid := u.forkpty(&master_fd, nil, nil, &ws)
-	if pid < 0 {
-		libc.perror("Failed to open PTY")
-		os.exit(0)
-	}
-
-	// Child process launch shell.
-	if pid == 0 {
-		shell_process()
-	}
-
-	// Set master PTY non-blocking so we can poll it cleanly in the UI loop
-	flags := posix.fcntl(master_fd, .GETFL, 0)
-
-	O_NONBLOCK := transmute(c.int)posix.O_Flags{.NONBLOCK}
-	posix.fcntl(master_fd, .SETFL, flags | O_NONBLOCK, 0)
-
-	return master_fd
-}
-
 is_modifier_key :: proc(key: sdl.Keycode) -> bool {
 	return(
 		key == sdl.K_LCTRL ||
@@ -104,7 +53,7 @@ main :: proc() {
 	context.logger = log.create_console_logger(log_level)
 	defer log.destroy_console_logger(context.logger)
 
-		log.debug("DEBUG logging enabled!")
+	log.debug("DEBUG logging enabled!")
 
 	// Set preferences to defaults.
 	prefs := t.default_preferences()
@@ -119,13 +68,9 @@ main :: proc() {
 	win_h := i32(600)
 	log.debugf("WinDim: %dx%d", win_w, win_h)
 
-	// PTY setup.
-	master_fd := pty_init()
-	defer posix.close(master_fd)
-
 	// Libvterm setup
 	cols, rows: i32 = 80, 24 // Defaults.
-	terminal, state := tty.terminal_init(master_fd, rows, cols)
+	terminal, state := tty.terminal_init(rows, cols)
 	if state != .OK {
 		fmt.println("Failed to init Terminal!")
 		return
@@ -285,16 +230,16 @@ main :: proc() {
 			}
 		}
 
-		sdl.SetRenderDrawColorFloat(
+		sdl.SetRenderDrawColor(
 			renderer,
 			prefs.bg_color.r,
 			prefs.bg_color.g,
 			prefs.bg_color.b,
-			1.0,
+			prefs.bg_color.a,
 		)
 		sdl.RenderClear(renderer)
 
-		tty.render_terminal(terminal, &ctx)
+		tty.render_terminal(terminal, &ctx, prefs)
 		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), prefs, fps_ctx.fps)
 
 		sdl.RenderPresent(renderer)
