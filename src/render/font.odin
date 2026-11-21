@@ -43,7 +43,7 @@ load_font :: proc() -> ^ttf.Font {
 	font_w = i32(math.ceil_f32(glyph_w))
 	font_h = i32(math.ceil_f32(glyph_h))
 
-	log.info("Cell dimensions %dx%d", font_w, font_h)
+	log.infof("Cell dimensions %dx%d", font_w, font_h)
 
 	return font
 }

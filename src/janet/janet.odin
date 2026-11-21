@@ -76,10 +76,12 @@ foreign libjanet {
 	janet_truthy :: proc "c" (x: Janet) -> c.int ---
 
 	// Environment:
+	janet_gcroot :: proc "c" (root: Janet) ---
+	janet_gcunroot :: proc "c" (root: Janet) -> c.int ---
+
 	janet_setdyn :: proc "c" (name: cstring, val: Janet) ---
 	janet_dyn :: proc "c" (name: cstring) -> Janet ---
 	janet_def :: proc "c" (env: ^JanetTable, name: cstring, val: Janet, documentation: cstring) ---
-
 
 	// Execution:
 	janet_dobytes :: proc "c" (env: ^JanetTable, str: ^u8, len: i32, sourcePath: cstring, out: ^Janet) -> c.int ---
@@ -98,6 +100,7 @@ foreign libjanet {
 	janet_wrap_string :: proc "c" (s: ^u8) -> Janet ---
 	janet_wrap_keyword :: proc "c" (sym: rawptr) -> Janet ---
   janet_wrap_cfunction :: proc "c" (fn: JanetCFunction) -> Janet ---
+	janet_wrap_table :: proc "c" (x: ^JanetTable) -> Janet ---
 	janet_wrap_pointer :: proc "c" (x: rawptr) -> Janet ---
 	janet_wrap_integer :: proc "c" (x: c.int) -> Janet ---
 

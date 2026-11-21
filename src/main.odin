@@ -149,7 +149,7 @@ main :: proc() {
 	font := render.load_font()
 	defer ttf.CloseFont(font)
 
-	window := sdl.CreateWindow(pref.title, win_w, win_h, {.RESIZABLE})
+	window := sdl.CreateWindow(prefs.title, win_w, win_h, {.RESIZABLE})
 	if window == nil do return
 	defer sdl.DestroyWindow(window)
 
@@ -273,14 +273,13 @@ main :: proc() {
 				win_h = event.window.data2
 
 				// TODO: Update PTY and LIBVTERM.
-				resize_terminal(
-					master_fd,
+				tty.resize_terminal(
 					terminal,
 					f32(win_w),
 					f32(win_h),
 					f32(render.font_w),
 					f32(render.font_h),
-					&pref,
+					prefs,
 				)
 				terminal.dirty = true
 			}
@@ -288,15 +287,15 @@ main :: proc() {
 
 		sdl.SetRenderDrawColorFloat(
 			renderer,
-			pref.bg_color.r,
-			pref.bg_color.g,
-			pref.bg_color.b,
+			prefs.bg_color.r,
+			prefs.bg_color.g,
+			prefs.bg_color.b,
 			1.0,
 		)
 		sdl.RenderClear(renderer)
 
 		tty.render_terminal(terminal, &ctx)
-		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), &pref, fps_ctx.fps)
+		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), prefs, fps_ctx.fps)
 
 		sdl.RenderPresent(renderer)
 	}

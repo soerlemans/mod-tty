@@ -2,9 +2,18 @@ package janet
 
 import "core:log"
 import "core:os"
+import "base:runtime"
 import "core:strings"
 
 import t "../types"
+
+@(private)
+g_ctx: runtime.Context
+
+capture_scripting_context :: proc() {
+	g_ctx = context
+}
+
 
 eval_file :: proc(env: ^JanetTable, path: string, allocator := context.allocator) -> bool {
 	data, err := os.read_entire_file(path, allocator)
@@ -35,6 +44,9 @@ eval_file :: proc(env: ^JanetTable, path: string, allocator := context.allocator
 // If any of these fail just kill the program.
 // Initialize Janet VM, and load configuration.
 init_scripting :: proc(prefs: ^t.Preferences) {
+	// Propagate context to C exposed functions.
+	capture_scripting_context()
+
 	res := janet_init()
 	if res != 0 {
 		log.errorf("Failed to initialize Janet VM (error: %d)", res)
@@ -42,9 +54,18 @@ init_scripting :: proc(prefs: ^t.Preferences) {
 	}
 
 	env := janet_core_env(nil)
+	if env == nil {
+   log.errorf("Failed to create Janet core environment")
+   janet_deinit()
+   os.exit(1)
+	}
+
+	// Pin env so that its always referable.
+	janet_gcroot(janet_wrap_table(env))
 
 	// Register Odin interop.
-	janet_setdyn("preferences", janet_wrap_pointer(prefs))
+	// janet_setdyn("preferences", janet_wrap_pointer(prefs))
+	g_prefs = prefs
 	register_cfuns(env)
 
 	// Load config file.

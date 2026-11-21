@@ -1,11 +1,14 @@
 # Test config.
 # init.janet
 
-(def config
-  @{"title"         "ModTTY"
-		"background"    [18 18 24]
-		"foreground"    [220 220 204]
-    "spacer-color"  [40 40 55]
-    "accent-color"  [100 200 255]
-    "spacer-height" 24}
-	)
+# (def config
+#   @{"title"         "ModTTY"
+# 		"background"    [18 18 24]
+# 		"foreground"    [220 220 204]
+#     "spacer-color"  [40 40 55]
+#     "accent-color"  [100 200 255]
+#     "spacer-height" 24}
+# 	)
+
+# (set-font-size 28)
+(set-font-size 50)

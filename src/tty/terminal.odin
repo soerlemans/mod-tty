@@ -14,6 +14,7 @@ import j "../janet"
 import render "../render"
 import vterm "../sys_vterm"
 import t "../types"
+import plibc "../posix_libc"
 
 READ_BUF_SIZE :: 4096
 
@@ -225,8 +226,7 @@ terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, Terminal
 }
 
 resize_terminal :: proc(
-	master_fd: posix.FD,
-	terminal: ^tty.Terminal,
+	term: ^Terminal,
 	win_w, win_h, font_w, font_h: f32,
 	pref: ^t.Preferences,
 ) {
@@ -238,7 +238,7 @@ resize_terminal :: proc(
 	if rows < 5 {rows = 5}
 
 	// Update libvterm grid size.
-	vterm.vterm_set_size(terminal.vt, c.int(rows), c.int(cols))
+	vterm.vterm_set_size(term.vt, c.int(rows), c.int(cols))
 
 	// Notify the kernel PTY of the new dimensions.
 	ws := plibc.winsize {
@@ -247,7 +247,7 @@ resize_terminal :: proc(
 		ws_xpixel = u16(win_w),
 		ws_ypixel = u16(win_h),
 	}
-	plibc.ioctl(i32(master_fd), plibc.TIOCSWINSZ, &ws)
+	plibc.ioctl(i32(term.pty_fd), plibc.TIOCSWINSZ, &ws)
 }
 
 
