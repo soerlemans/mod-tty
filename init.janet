@@ -10,5 +10,4 @@
 #     "spacer-height" 24}
 # 	)
 
-# (set-font-size 28)
-(set-font-size 50)
+(set-font-size 18)

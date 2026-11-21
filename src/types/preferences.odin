@@ -19,6 +19,7 @@ FONT_SIZE :: 18
 Preferences :: struct {
 	title:         cstring,
 	font_size:     int,
+	font_path:     cstring,
 	bg_color:      sdl.FColor,
 	fg_color:      sdl.FColor,
 	spacer_color:  sdl.FColor,
@@ -30,7 +31,8 @@ default_preferences :: proc() -> ^Preferences {
 		prefs := new(Preferences)
 
 		prefs.title         = "ModTTY - Default"
-		prefs.font_size     = 18
+		prefs.font_size     = FONT_SIZE
+		prefs.font_path     = FONT_SYSTEM_DEFAULT
     prefs.bg_color      = sdl.FColor{18.0 / 255.0, 18.0 / 255.0, 24.0 / 255.0, 1.0}
     prefs.fg_color      = sdl.FColor{220.0 / 255.0, 220.0 / 255.0, 204.0 / 255.0, 1.0}
     prefs.accent_color  = sdl.FColor{100.0 / 255.0, 200.0 / 255.0, 255.0 / 255.0, 1.0}

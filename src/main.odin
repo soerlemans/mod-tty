@@ -146,7 +146,7 @@ main :: proc() {
 	defer ttf.Quit()
 
 	// Load font.
-	font := render.load_font()
+	font := render.load_font(prefs)
 	defer ttf.CloseFont(font)
 
 	window := sdl.CreateWindow(prefs.title, win_w, win_h, {.RESIZABLE})
