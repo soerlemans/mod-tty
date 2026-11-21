@@ -7,6 +7,7 @@ when ODIN_OS == .Windows {
 		foreign import libjanet {
 				"../../deps/build/janet.lib"
 		}
+		// TODO: Error out...
 } else when ODIN_OS == .Darwin || ODIN_OS == .Linux {
 		foreign import libjanet {
 				"../../deps/build/libjanet.a"
@@ -16,11 +17,14 @@ when ODIN_OS == .Windows {
 // Janet's primary 64-bit tagged value type.
 Janet :: u64
 
+JanetCFunction :: #type proc "c" (argc: i32, argv: [^]Janet) -> Janet
+
 // Opaque pointer types for Janet VM constructs.
 JanetTable :: struct {}
 JanetFiber :: struct {}
 JanetEvalFlags :: c.int
 
+/* All possible types */
 JanetType :: enum c.int {
 	JANET_NUMBER,
 	JANET_NIL,
@@ -40,34 +44,85 @@ JanetType :: enum c.int {
 	JANET_POINTER,
 }
 
+/* Fiber signals */
+JanetSignal :: enum c.int {
+    JANET_SIGNAL_OK,
+    JANET_SIGNAL_ERROR,
+    JANET_SIGNAL_DEBUG,
+    JANET_SIGNAL_YIELD,
+    JANET_SIGNAL_USER0,
+    JANET_SIGNAL_USER1,
+    JANET_SIGNAL_USER2,
+    JANET_SIGNAL_USER3,
+    JANET_SIGNAL_USER4,
+    JANET_SIGNAL_USER5,
+    JANET_SIGNAL_USER6,
+    JANET_SIGNAL_USER7,
+    JANET_SIGNAL_USER8,
+    JANET_SIGNAL_USER9,
+    JANET_SIGNAL_INTERRUPT = JANET_SIGNAL_USER8,
+    JANET_SIGNAL_EVENT = JANET_SIGNAL_USER9,
+}
+
 @(default_calling_convention = "c")
 foreign libjanet {
-	janet_init :: proc() ---
-	janet_deinit :: proc() ---
-	janet_core_env :: proc(replacements: rawptr) -> ^JanetTable ---
+	// Janet VM:
+	janet_init :: proc "c" () -> c.int ---
+	janet_deinit :: proc "c" () ---
+	janet_core_env :: proc "c" (replacements: rawptr) -> ^JanetTable ---
+	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
+	janet_type :: proc "c" (x: Janet) -> JanetType ---
+	janet_checktype :: proc "c" (x: Janet, type: JanetType ) -> c.int ---
+	janet_truthy :: proc "c" (x: Janet) -> c.int ---
 
-	janet_type :: proc(x: Janet) -> JanetType ---
+	// Environment:
+	janet_setdyn :: proc "c" (name: cstring, val: Janet) ---
+	janet_dyn :: proc "c" (name: cstring) -> Janet ---
+	janet_def :: proc "c" (env: ^JanetTable, name: cstring, val: Janet, documentation: cstring) ---
 
-	janet_dostring :: proc(env: ^JanetTable, str: cstring, sourcePath: cstring, out: ^Janet) -> c.int ---
-	janet_table_get :: proc(t: ^JanetTable, key: Janet) -> Janet ---
 
-	janet_csymbol :: proc(str: cstring) -> rawptr ---
-	janet_cstring :: proc(str: cstring) -> ^u8 ---
+	// Execution:
+	janet_dobytes :: proc "c" (env: ^JanetTable, str: ^u8, len: i32, sourcePath: cstring, out: ^Janet) -> c.int ---
+	janet_dostring :: proc "c" (env: ^JanetTable, str: cstring, sourcePath: cstring, out: ^Janet) -> c.int ---
 
-	janet_wrap_string :: proc(s: ^u8) -> Janet ---
-	janet_wrap_keyword :: proc(sym: rawptr) -> Janet ---
+	// C types:
+	janet_csymbol :: proc "c" (str: cstring) -> rawptr ---
+	janet_cstring :: proc "c" (str: cstring) -> ^u8 ---
 
-	janet_unwrap_integer :: proc(x: Janet) -> i32 ---
-	janet_unwrap_table :: proc(x: Janet) -> ^JanetTable ---
+	// Wrap:
+	janet_wrap_nil :: proc "c" () -> Janet ---
+	janet_wrap_number :: proc "c" (x: f64) -> Janet ---
+	janet_wrap_true :: proc "c" () -> Janet ---
+	janet_wrap_false :: proc "c" () -> Janet ---
+	janet_wrap_boolean :: proc "c" (val: c.bool) -> Janet ---
+	janet_wrap_string :: proc "c" (s: ^u8) -> Janet ---
+	janet_wrap_keyword :: proc "c" (sym: rawptr) -> Janet ---
+  janet_wrap_cfunction :: proc "c" (fn: JanetCFunction) -> Janet ---
+	janet_wrap_pointer :: proc "c" (x: rawptr) -> Janet ---
+	janet_wrap_integer :: proc "c" (x: c.int) -> Janet ---
+
+	// Unwrap:
+	janet_unwrap_integer :: proc "c" (x: Janet) -> i32 ---
+	janet_unwrap_number :: proc "c" (x: Janet) -> f64 ---
+
+	janet_unwrap_pointer :: proc "c" (x: Janet) -> rawptr ---
+	janet_unwrap_table :: proc "c" (x: Janet) -> ^JanetTable ---
+
+	janet_arity :: proc "c" (arity: i32, min: i32, max: i32) ---
+	janet_fixarity :: proc "c" (arity: i32, fix: i32) ---
+
+	// Error:
+  janet_panic         :: proc "c" (format: cstring) ---
+  janet_panicf         :: proc "c" (format: cstring, #c_vararg args: ..any) ---
 }
 
 // Re-implement the janet_ckeywordv macro cleanly in Odin:
 // In Janet's C API: #define janet_ckeywordv(s) janet_wrap_keyword(janet_csymbol(s)).
-janet_ckeywordv :: proc "c" (str: cstring) -> Janet {
+janet_ckeywordv :: proc(str: cstring) -> Janet {
 	sym := janet_csymbol(str)
 	return janet_wrap_keyword(sym)
 }
 
-janet_cstringv :: proc "c" (str: cstring) -> Janet {
+janet_cstringv :: proc(str: cstring) -> Janet {
 	return janet_wrap_string(janet_cstring(str))
 }

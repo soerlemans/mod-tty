@@ -1,23 +1,23 @@
 package main
 
-import "core:log"
 import "core:c"
 import "core:c/libc"
 import "core:fmt"
+import "core:log"
 import "core:os"
 import "core:strings"
 import "core:sys/posix"
 
-import j "janet"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import ap "app_config"
+import j "janet"
 import plibc "posix_libc"
 import render "render"
 import u "sys_util"
 import vterm "sys_vterm"
 import tty "tty"
+import t "types"
 
 FpsContext :: struct {
 	fps:         f32,
@@ -86,32 +86,6 @@ pty_init :: proc() -> posix.FD {
 	return master_fd
 }
 
-resize_terminal :: proc(
-	master_fd: posix.FD,
-	terminal: ^tty.Terminal,
-	win_w, win_h, font_w, font_h: f32,
-	config: ^ap.AppConfig,
-) {
-	available_h := win_h - config.spacer_height
-	cols := int(win_w / font_w)
-	rows := int(available_h / font_h)
-
-	if cols < 10 {cols = 10}
-	if rows < 5 {rows = 5}
-
-	// Update libvterm grid size.
-	vterm.vterm_set_size(terminal.vt, c.int(rows), c.int(cols))
-
-	// Notify the kernel PTY of the new dimensions.
-	ws := plibc.winsize {
-		ws_row    = u16(rows),
-		ws_col    = u16(cols),
-		ws_xpixel = u16(win_w),
-		ws_ypixel = u16(win_h),
-	}
-	plibc.ioctl(i32(master_fd), plibc.TIOCSWINSZ, &ws)
-}
-
 is_modifier_key :: proc(key: sdl.Keycode) -> bool {
 	return(
 		key == sdl.K_LCTRL ||
@@ -127,17 +101,18 @@ is_modifier_key :: proc(key: sdl.Keycode) -> bool {
 
 main :: proc() {
 	log_level: log.Level = .Debug when ODIN_DEBUG else .Info
-  context.logger = log.create_console_logger(log_level)
-  defer log.destroy_console_logger(context.logger)
+	context.logger = log.create_console_logger(log_level)
+	defer log.destroy_console_logger(context.logger)
 
-	log.debug("DEBUG logging enabled!")
+		log.debug("DEBUG logging enabled!")
+
+	// Set preferences to defaults.
+	prefs := t.default_preferences()
+	defer free(prefs)
 
 	// Initialize Janet VM, and load configuration.
-	j.janet_init()
+	j.init_scripting(prefs)
 	defer j.janet_deinit()
-
-	env := j.janet_core_env(nil)
-	config := ap.load_app_config(env, "init.janet")
 
 	// For now we pick 800x600 as default size.
 	win_w := i32(800)
@@ -174,7 +149,7 @@ main :: proc() {
 	font := render.load_font()
 	defer ttf.CloseFont(font)
 
-	window := sdl.CreateWindow(config.title, win_w, win_h, {.RESIZABLE})
+	window := sdl.CreateWindow(pref.title, win_w, win_h, {.RESIZABLE})
 	if window == nil do return
 	defer sdl.DestroyWindow(window)
 
@@ -305,7 +280,7 @@ main :: proc() {
 					f32(win_h),
 					f32(render.font_w),
 					f32(render.font_h),
-					&config,
+					&pref,
 				)
 				terminal.dirty = true
 			}
@@ -313,15 +288,15 @@ main :: proc() {
 
 		sdl.SetRenderDrawColorFloat(
 			renderer,
-			config.bg_color.r,
-			config.bg_color.g,
-			config.bg_color.b,
+			pref.bg_color.r,
+			pref.bg_color.g,
+			pref.bg_color.b,
 			1.0,
 		)
 		sdl.RenderClear(renderer)
 
 		tty.render_terminal(terminal, &ctx)
-		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), &config, fps_ctx.fps)
+		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), &pref, fps_ctx.fps)
 
 		sdl.RenderPresent(renderer)
 	}

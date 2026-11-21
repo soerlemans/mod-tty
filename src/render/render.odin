@@ -10,7 +10,7 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import ap "../app_config"
+import t "../types"
 
 RenderContext :: struct {
 	renderer: ^sdl.Renderer,
@@ -52,24 +52,14 @@ render_string :: proc(ctx: ^RenderContext, text: string, col, row: f32, color: s
 	render_text_string(ctx, text, x, y, byte_color)
 }
 
-render_spacer_bar :: proc(
-	ctx: ^RenderContext,
-	win_h, win_w: f32,
-	config: ^ap.AppConfig,
-	fps: f32,
-) {
+render_spacer_bar :: proc(ctx: ^RenderContext, win_h, win_w: f32, pref: ^t.Preferences, fps: f32) {
 	// Diagnostic spacer bar.
-	spacer_rect := sdl.FRect {
-		0,
-		f32(win_h) - config.spacer_height,
-		f32(win_w),
-		config.spacer_height,
-	}
+	spacer_rect := sdl.FRect{0, f32(win_h) - pref.spacer_height, f32(win_w), pref.spacer_height}
 	sdl.SetRenderDrawColorFloat(
 		ctx.renderer,
-		config.spacer_color.r,
-		config.spacer_color.g,
-		config.spacer_color.b,
+		pref.spacer_color.r,
+		pref.spacer_color.g,
+		pref.spacer_color.b,
 		1.0,
 	)
 	sdl.RenderFillRect(ctx.renderer, &spacer_rect)
@@ -78,7 +68,7 @@ render_spacer_bar :: proc(
 	diag_text := fmt.tprintf(
 		"FPS: %.1f | Spacer: %.0fpix | Status: Active",
 		fps,
-		config.spacer_height,
+		pref.spacer_height,
 	)
-	render_string(ctx, diag_text, 1, y, config.accent_color)
+	render_string(ctx, diag_text, 1, y, pref.accent_color)
 }

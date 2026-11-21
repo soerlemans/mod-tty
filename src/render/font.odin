@@ -1,7 +1,7 @@
 package render
 
-import "core:log"
 import "core:fmt"
+import "core:log"
 import "core:math"
 import "core:os"
 

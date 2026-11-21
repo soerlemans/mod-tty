@@ -10,8 +10,10 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
+import j "../janet"
 import render "../render"
 import vterm "../sys_vterm"
+import t "../types"
 
 READ_BUF_SIZE :: 4096
 
@@ -221,6 +223,33 @@ terminal_init :: proc(pty_fd: posix.FD, rows, cols: i32) -> (^Terminal, Terminal
 
 	return term, .OK
 }
+
+resize_terminal :: proc(
+	master_fd: posix.FD,
+	terminal: ^tty.Terminal,
+	win_w, win_h, font_w, font_h: f32,
+	pref: ^t.Preferences,
+) {
+	available_h := win_h - pref.spacer_height
+	cols := int(win_w / font_w)
+	rows := int(available_h / font_h)
+
+	if cols < 10 {cols = 10}
+	if rows < 5 {rows = 5}
+
+	// Update libvterm grid size.
+	vterm.vterm_set_size(terminal.vt, c.int(rows), c.int(cols))
+
+	// Notify the kernel PTY of the new dimensions.
+	ws := plibc.winsize {
+		ws_row    = u16(rows),
+		ws_col    = u16(cols),
+		ws_xpixel = u16(win_w),
+		ws_ypixel = u16(win_h),
+	}
+	plibc.ioctl(i32(master_fd), plibc.TIOCSWINSZ, &ws)
+}
+
 
 draw_rect :: proc(renderer: ^sdl.Renderer, x, y, w, h: f32, color: vterm.VTermColor) {
 	sdl.SetRenderDrawColor(renderer, color.rgb.red, color.rgb.green, color.rgb.blue, 255)
