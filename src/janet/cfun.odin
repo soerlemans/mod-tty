@@ -14,6 +14,10 @@ g_prefs: ^t.Preferences
 
 // Obtain preferences pointer from dynamic binding.
 janet_obtain_preferences :: proc() -> ^t.Preferences {
+	return g_prefs
+	// TODO: Replace and get dynamic binding to work.
+
+	/*
 	val := janet_dyn("preferences")
 
 	if janet_checktype(val, .JANET_POINTER) == 0 {
@@ -22,6 +26,7 @@ janet_obtain_preferences :: proc() -> ^t.Preferences {
 		janet_panic("missing :preferences pointer in Janet dynamic bindings!")
 	}
 	return (^t.Preferences)(janet_unwrap_pointer(val))
+  */
 }
 
 // Odin function binding (set-font-size <size>).
@@ -30,14 +35,31 @@ cfun_set_font_size :: proc "c" (argc: i32, argv: [^]Janet) -> Janet {
 	janet_fixarity(argc, 1)
 
 	args := ([^]Janet)(argv)
-	size := janet_unwrap_number(argv[0])
+	size := janet_unwrap_integer(argv[0])
 	if size < 6 || size > 96 {
-		janet_panicf("font size out of range: %g", size)
+		janet_panicf("Font size out of range: %g", size)
 	}
 
-	// prefs := janet_obtain_preferences()
-	prefs:= g_prefs // TODO: Replace with dyn.
+	prefs := janet_obtain_preferences()
 	prefs.font_size = int(size)
+	log.debug("Config set font_size =", prefs.font_size)
+
+	return janet_wrap_nil()
+}
+
+// Odin function binding (set-hyper-buffer-height <size>).
+cfun_set_hyper_buffer_height :: proc "c" (argc: i32, argv: [^]Janet) -> Janet {
+	context = g_ctx
+	janet_fixarity(argc, 1)
+
+	args := ([^]Janet)(argv)
+	size := janet_unwrap_number(argv[0])
+	if size < 12 || size > 40 {
+		janet_panicf("Hyper buffer height out of range: %g", size)
+	}
+
+	prefs := janet_obtain_preferences()
+	prefs.spacer_height = f32(size) // TODO: Rename spacer to hyper_buffer_height.
 	log.debug("Config set font_size =", prefs.font_size)
 
 	return janet_wrap_nil()
@@ -47,4 +69,7 @@ cfun_set_font_size :: proc "c" (argc: i32, argv: [^]Janet) -> Janet {
 register_cfuns :: proc(env: ^JanetTable) {
 	fn_val := janet_wrap_cfunction(cfun_set_font_size)
 	janet_def(env, "set-font-size", fn_val, "(set-font-size n)\n\nSet terminal font size.")
+
+	fn_val = janet_wrap_cfunction(cfun_set_hyper_buffer_height)
+	janet_def(env, "set-hyper-buffer-height", fn_val, "(set-hyper-buffer-height n)\n\nSet height of the hyper buffer.")
 }

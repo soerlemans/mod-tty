@@ -10,4 +10,6 @@
 #     "spacer-height" 24}
 # 	)
 
+# Defaults:
 (set-font-size 18)
+(set-hyper-buffer-height 24)
