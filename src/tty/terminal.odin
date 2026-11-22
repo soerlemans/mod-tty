@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:slice"
+import "core:strings"
 import "core:sys/posix"
 
 import sdl "vendor:sdl3"
@@ -33,6 +34,11 @@ PollStatus :: enum {
 	PTY_ERROR,
 }
 
+IpcServer :: struct {
+	fd:   posix.FD,
+	path: cstring,
+}
+
 // Scrollback line stored in your own ring buffer
 ScrollbackLine :: struct {
 	cells: []vterm.VTermScreenCell,
@@ -43,6 +49,7 @@ Terminal :: struct {
 	vt_state:       ^vterm.VTermState,
 	vt_screen:      ^vterm.VTermScreen,
 	pty_fd:         posix.FD,
+	ipc_server:     ^IpcServer,
 	read_buf:       [READ_BUF_SIZE]u8,
 	poll_fds:       [1]posix.pollfd,
 	rows:           c.int,
@@ -198,8 +205,59 @@ VTERM_CALLBACKS := vterm.VTermScreenCallbacks {
 	sb_clear    = on_sb_clear,
 }
 
-shell_process :: proc() {
+// Sets up the unix socket for shell integration.
+ipc_init :: proc(pid: int) -> ^IpcServer {
+	srv := new(IpcServer)
+
+	runtime_dir := libc.getenv("XDG_RUNTIME_DIR")
+	if runtime_dir == "" {
+		runtime_dir = "/tmp"
+	}
+
+	path_str := fmt.aprintf("%s/modtty-%d.sock", runtime_dir, pid)
+	srv.path = strings.clone_to_cstring(path_str)
+
+	// Open UNIX socket.
+	fd := posix.socket(.UNIX, .STREAM, {})
+	if fd == -1 {
+		free(srv)
+		return nil
+	}
+
+	// Set non-blocking & close-on-exec so child shell doesn't inherit it.
+	flags := posix.fcntl(fd, .GETFL)
+	posix.fcntl(fd, .SETFL, flags | i32(posix.O_NONBLOCK))
+
+	fd_flags := posix.fcntl(fd, .GETFD)
+	posix.fcntl(fd, .SETFD, fd_flags | i32(posix.FD_CLOEXEC))
+
+	posix.unlink(srv.path)
+
+	addr: posix.sockaddr_un
+	addr.sun_family = .UNIX
+	copy(addr.sun_path[:], path_str)
+
+	if posix.bind(fd, cast(^posix.sockaddr)&addr, size_of(addr)) != .OK {
+		posix.close(fd)
+		free(srv)
+		return nil
+	}
+
+	if posix.listen(fd, 8) != .OK {
+		posix.close(fd)
+		free(srv)
+		return nil
+	}
+
+	srv.fd = fd
+	return srv
+}
+
+// Child process which spawns the shell.
+shell_process :: proc(ipc: ^IpcServer) {
 	posix.setenv("TERM", "xterm-256color", true)
+	posix.setenv("MODTTY_SOCKET", ipc.path, true)
+
 	term := libc.getenv("TERM")
 	shell := libc.getenv("SHELL")
 
@@ -223,7 +281,7 @@ shell_process :: proc() {
 	os.exit(0)
 }
 
-pty_init :: proc(rows, cols: i32) -> posix.FD {
+pty_init :: proc(rows, cols: i32, ipc: ^IpcServer) -> posix.FD {
 	// PTY setup.
 	pty_fd: posix.FD = -1
 	ws := u.winsize {
@@ -240,7 +298,7 @@ pty_init :: proc(rows, cols: i32) -> posix.FD {
 
 	// Child process flow launches shell.
 	if pid == 0 {
-		shell_process()
+		shell_process(ipc)
 	}
 
 	// Set master PTY non-blocking so we can poll it cleanly in the UI loop
@@ -255,14 +313,25 @@ pty_init :: proc(rows, cols: i32) -> posix.FD {
 terminal_init :: proc(rows, cols: i32) -> (^Terminal, TerminalStatus) {
 	term := new(Terminal)
 
-	pfd := pty_init(rows, cols)
+	// IPC setup.
+	ipc := ipc_init(os.get_pid())
+	if ipc == nil {
+		free(term)
+		log.error("Shell IPC setup failed")
+		os.exit(1)
+	}
+
+	// PTY setup.
+	pfd := pty_init(rows, cols, ipc)
 	if pfd < 0 {
 		free(term)
 		log.errorf("Failed to init PTY: %d", pfd)
 		os.exit(1)
 	}
+
 	// Init members.
 	term.pty_fd = pfd
+	term.ipc_server = ipc
 	term.poll_fds = [1]posix.pollfd{{fd = pfd, events = {.IN}}}
 	term.rows = rows
 	term.cols = cols
@@ -506,6 +575,21 @@ terminal_free :: proc(term: ^Terminal) {
 
 	if term.pty_fd > -1 {
 		posix.close(term.pty_fd)
+	}
+
+	// TODO: Move to own ipc_destroy.
+	if term.ipc_server != nil {
+		if term.ipc_server.fd != -1 {
+			posix.close(term.ipc_server.fd)
+			term.ipc_server.fd = -1
+		}
+		if term.ipc_server.path != nil {
+			posix.unlink(term.ipc_server.path)
+			delete(term.ipc_server.path)
+			term.ipc_server.path = nil
+		}
+
+		free(term.ipc_server)
 	}
 
 	free(term)
