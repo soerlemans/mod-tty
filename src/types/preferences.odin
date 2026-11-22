@@ -54,9 +54,9 @@ ccode_to_fcolor :: proc(ccode: string) -> sdl.FColor {
 	}
 
 	fcolor := sdl.FColor {
-		(f32(ccode[0]) / 255.0),
-		(f32(ccode[1]) / 255.0),
-		(f32(ccode[2]) / 255.0),
+		(f32(bytes[0]) / 255.0),
+		(f32(bytes[1]) / 255.0),
+		(f32(bytes[2]) / 255.0),
 		1.0,
 	}
 
@@ -73,8 +73,6 @@ ccode_to_color :: proc(ccode: string) -> sdl.Color {
 		os.exit(1)
 	}
 	defer delete(bytes)
-
-	fmt.eprintf("ccode: %v\n", bytes)
 
 	color := sdl.Color{bytes[0], bytes[1], bytes[2], 255}
 

@@ -250,6 +250,7 @@ ipc_init :: proc(pid: int) -> ^IpcServer {
 	}
 
 	srv.fd = fd
+	log.debugf("IpcServer init: %v", srv)
 	return srv
 }
 
@@ -268,10 +269,11 @@ shell_process :: proc(ipc: ^IpcServer) {
 		shell = cstring("/bin/sh")
 	}
 
-	// TODO: Have this log back to master pid_t somehow.
-	log.infof("TERM=%s", term)
-	log.infof("SHELL=%s", shell)
-	fmt.println("Welcome to Hyper term.")
+	when ODIN_DEBUG {
+		log.infof("TERM=%s", term)
+		log.infof("SHELL=%s", shell)
+		log.infof("MODTTY=%s", ipc.path)
+	}
 
 	res := posix.execlp(shell, shell, nil)
 	if res == -1 {
