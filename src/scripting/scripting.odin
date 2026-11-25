@@ -7,16 +7,11 @@ import "core:strings"
 
 import j "../ffi/janet"
 
+import ml "../tty/modeline"
 import t "../types"
 
 @(private)
 g_ctx: runtime.Context
-
-
-ScriptingContext :: struct {
-		env: ^j.JanetTable,
-		modeline_callbacks: [dynamic]^j.JanetFunction
-}
 
 capture_rt_context :: proc() {
 	g_ctx = context
@@ -51,11 +46,9 @@ eval_file :: proc(env: ^j.JanetTable, path: string, allocator := context.allocat
 // TODO: Also inject terminal into the environment and manipulate it.
 // If any of these fail just kill the program.
 // Initialize Janet VM, and load configuration.
-init_scripting :: proc(prefs: ^t.Preferences) -> ScriptingContext {
+init_scripting :: proc(prefs: ^t.Preferences, modeline: ^ml.Modeline) -> ^j.JanetTable {
 	// Propagate context to C exposed functions.
 	capture_rt_context()
-
-	ctx: ScriptingContext
 
 	res := j.janet_init()
 	if res != 0 {
@@ -63,31 +56,30 @@ init_scripting :: proc(prefs: ^t.Preferences) -> ScriptingContext {
 		os.exit(1)
 	}
 
-	ctx.env = j.janet_core_env(nil)
-	if ctx.env == nil {
+	env := j.janet_core_env(nil)
+	if env == nil {
 		log.errorf("Failed to create Janet core environment")
 		j.janet_deinit()
 		os.exit(1)
 	}
 
 	// Pin env to root so its never relocated.
-	j.janet_gcroot(j.janet_wrap_table(ctx.env))
+	j.janet_gcroot(j.janet_wrap_table(env))
 
-	ctx.modeline_callbacks = make([dynamic]^j.JanetFunction, 0, 16)
+	// Register globals in environment.
+	j.janet_absolute_setdyn(env, "preferences", rawptr(prefs))
+	j.janet_absolute_setdyn(env, "modeline-callbacks", rawptr(&modeline.callbacks))
 
-	// Register Odin interop.
-	j.janet_absolute_setdyn(ctx.env, "preferences", rawptr(prefs))
-	j.janet_absolute_setdyn(ctx.env, "modeline-callbacks", rawptr(&ctx.modeline_callbacks))
+	register_cfuns(env)
 
-	register_cfuns(ctx.env)
-
-	// Load config file.
-	if eval_file(ctx.env, "init.janet") == false {
+	// TODO: Add reading from XDG_CONFIG_HOME.
+	// And on Debug just read local init.janet.
+	if eval_file(env, "init.janet") == false {
 		log.errorf("Failed to read init.janet config.")
 		os.exit(1)
 	}
 
-	return ctx
+	return env
 }
 
 

@@ -14,12 +14,13 @@ import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
 import j "../ffi/janet"
-import unix "../ffi/unix"
 import u "../ffi/sys_util"
+import unix "../ffi/unix"
 import vterm "../ffi/vterm"
 
 import render "../render"
 import t "../types"
+import ml "modeline"
 
 READ_BUF_SIZE :: 4096
 
@@ -57,8 +58,6 @@ Terminal :: struct {
 	cursor_visible: bool,
 	title:          string,
 	bell_rung:      bool,
-
-	modeline: Modeline,
 
 	// Bounded scrollback history (e.g., ring buffer of up to 10,000 lines)
 	scrollback:     [dynamic]ScrollbackLine,
@@ -529,8 +528,6 @@ terminal_free :: proc(term: ^Terminal) {
 	}
 
 	ipc_free(term.ipc_server)
-	modeline_free(&term.modeline)
 
 	free(term)
 }
-

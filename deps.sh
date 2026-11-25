@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 cd "$(dirname "$0")"
 cd deps/
@@ -10,7 +10,7 @@ if [[ -f "build/libjanet.a" && -f "build/_deps/vterm-src/.libs/libvterm.a" ]];
 then
 		echo "[+] Janet present"
 		echo "[+] libvterm present."
-		echo "[!] skipping build."
+		echo "[!] All deps are present, skipping rebuild."
 		exit 0
 fi
 

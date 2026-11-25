@@ -11,13 +11,14 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import scr "scripting"
 import j "ffi/janet"
 import u "ffi/sys_util"
 import vterm "ffi/vterm"
+import scr "scripting"
 
 import render "render"
 import tty "tty"
+import ml "tty/modeline"
 import t "types"
 
 FpsContext :: struct {
@@ -60,8 +61,12 @@ main :: proc() {
 	prefs := t.default_preferences()
 	defer free(prefs)
 
+	// Initialize modeline.
+	modeline := ml.modeline_init()
+	defer ml.modeline_free(modeline)
+
 	// Initialize scripting backend.
-	scr.init_scripting(prefs)
+	scr.init_scripting(prefs, modeline)
 	defer scr.deinit_scripting()
 
 	// For now we pick 800x600 as default size.
