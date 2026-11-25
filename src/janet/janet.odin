@@ -20,7 +20,9 @@ Janet :: u64
 JanetCFunction :: #type proc "c" (argc: i32, argv: [^]Janet) -> Janet
 
 // Opaque pointer types for Janet VM constructs.
+// TODO: Define fully.
 JanetTable :: struct {}
+JanetFunction :: struct {}
 JanetFiber :: struct {}
 JanetEvalFlags :: c.int
 
@@ -70,7 +72,13 @@ foreign libjanet {
 	janet_init :: proc "c" () -> c.int ---
 	janet_deinit :: proc "c" () ---
 	janet_core_env :: proc "c" (replacements: rawptr) -> ^JanetTable ---
-	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
+
+	// Call a function.
+	janet_pcall :: proc(fun: ^JanetFunction, argn: i32, argv: ^Janet, out: ^Janet, f: ^^JanetFiber) -> JanetSignal ---
+	janet_call :: proc(fun: ^JanetFunction, argn: i32, argv: ^Janet) -> Janet ---
+	janet_mcall :: proc(name: cstring, argn: i32, argv: ^Janet) -> Janet ---
+
+		// Typing:
 	janet_type :: proc "c" (x: Janet) -> JanetType ---
 	janet_checktype :: proc "c" (x: Janet, type: JanetType ) -> c.int ---
 	janet_truthy :: proc "c" (x: Janet) -> c.int ---
@@ -78,6 +86,9 @@ foreign libjanet {
 	// Environment:
 	janet_gcroot :: proc "c" (root: Janet) ---
 	janet_gcunroot :: proc "c" (root: Janet) -> c.int ---
+
+	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
+	janet_table_put :: proc "c" (t: ^JanetTable, key: Janet, val: Janet) ---
 
 	janet_setdyn :: proc "c" (name: cstring, val: Janet) ---
 	janet_dyn :: proc "c" (name: cstring) -> Janet ---
@@ -99,6 +110,7 @@ foreign libjanet {
 	janet_wrap_boolean :: proc "c" (val: c.bool) -> Janet ---
 	janet_wrap_string :: proc "c" (s: ^u8) -> Janet ---
 	janet_wrap_keyword :: proc "c" (sym: rawptr) -> Janet ---
+  janet_wrap_function :: proc "c" (fn: ^JanetFunction) -> Janet ---
   janet_wrap_cfunction :: proc "c" (fn: JanetCFunction) -> Janet ---
 	janet_wrap_table :: proc "c" (x: ^JanetTable) -> Janet ---
 	janet_wrap_pointer :: proc "c" (x: rawptr) -> Janet ---
@@ -107,9 +119,9 @@ foreign libjanet {
 	// Unwrap:
 	janet_unwrap_integer :: proc "c" (x: Janet) -> i32 ---
 	janet_unwrap_number :: proc "c" (x: Janet) -> f64 ---
-
-	janet_unwrap_pointer :: proc "c" (x: Janet) -> rawptr ---
 	janet_unwrap_table :: proc "c" (x: Janet) -> ^JanetTable ---
+	janet_unwrap_function :: proc "c" (x: Janet) -> ^JanetFunction ---
+	janet_unwrap_pointer :: proc "c" (x: Janet) -> rawptr ---
 
 	janet_arity :: proc "c" (arity: i32, min: i32, max: i32) ---
 	janet_fixarity :: proc "c" (arity: i32, fix: i32) ---

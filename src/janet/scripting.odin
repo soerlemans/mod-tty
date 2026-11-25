@@ -10,7 +10,13 @@ import t "../types"
 @(private)
 g_ctx: runtime.Context
 
-capture_scripting_context :: proc() {
+
+ScriptingContext :: struct {
+		env: ^JanetTable,
+		modeline_callbacks: [dynamic]^JanetFunction
+}
+
+capture_rt_context :: proc() {
 	g_ctx = context
 }
 
@@ -43,9 +49,11 @@ eval_file :: proc(env: ^JanetTable, path: string, allocator := context.allocator
 // TODO: Also inject terminal into the environment and manipulate it.
 // If any of these fail just kill the program.
 // Initialize Janet VM, and load configuration.
-init_scripting :: proc(prefs: ^t.Preferences) {
+init_scripting :: proc(prefs: ^t.Preferences) -> ScriptingContext {
 	// Propagate context to C exposed functions.
-	capture_scripting_context()
+	capture_rt_context()
+
+	ctx: ScriptingContext
 
 	res := janet_init()
 	if res != 0 {
@@ -53,24 +61,30 @@ init_scripting :: proc(prefs: ^t.Preferences) {
 		os.exit(1)
 	}
 
-	env := janet_core_env(nil)
-	if env == nil {
+	ctx.env = janet_core_env(nil)
+	if ctx.env == nil {
 		log.errorf("Failed to create Janet core environment")
 		janet_deinit()
 		os.exit(1)
 	}
 
-	// Pin env so that its always referable.
-	janet_gcroot(janet_wrap_table(env))
+	// Pin env to root so its never relocated.
+	janet_gcroot(janet_wrap_table(ctx.env))
+
+	ctx.modeline_callbacks = make([dynamic]^JanetFunction, 0, 16)
 
 	// Register Odin interop.
 	// janet_setdyn("preferences", janet_wrap_pointer(prefs))
-	g_prefs = prefs
-	register_cfuns(env)
+	janet_table_put(ctx.env, janet_ckeywordv("preferences"), janet_wrap_pointer(prefs))
+	janet_table_put(ctx.env, janet_ckeywordv("modeline-callbacks"), janet_wrap_pointer(&ctx.modeline_callbacks))
+
+	register_cfuns(ctx.env)
 
 	// Load config file.
-	if eval_file(env, "init.janet") == false {
+	if eval_file(ctx.env, "init.janet") == false {
 		log.errorf("Failed to read init.janet config.")
 		os.exit(1)
 	}
+
+	return ctx
 }

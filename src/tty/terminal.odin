@@ -34,11 +34,6 @@ PollStatus :: enum {
 	PTY_ERROR,
 }
 
-IpcServer :: struct {
-	fd:   posix.FD,
-	path: cstring,
-}
-
 // Scrollback line stored in your own ring buffer
 ScrollbackLine :: struct {
 	cells: []vterm.VTermScreenCell,
@@ -61,6 +56,8 @@ Terminal :: struct {
 	cursor_visible: bool,
 	title:          string,
 	bell_rung:      bool,
+
+	modeline: Modeline,
 
 	// Bounded scrollback history (e.g., ring buffer of up to 10,000 lines)
 	scrollback:     [dynamic]ScrollbackLine,
@@ -203,55 +200,6 @@ VTERM_CALLBACKS := vterm.VTermScreenCallbacks {
 	sb_pushline = on_sb_pushline,
 	sb_popline  = on_sb_popline,
 	sb_clear    = on_sb_clear,
-}
-
-// Sets up the unix socket for shell integration.
-ipc_init :: proc(pid: int) -> ^IpcServer {
-	srv := new(IpcServer)
-
-	runtime_dir := libc.getenv("XDG_RUNTIME_DIR")
-	if runtime_dir == "" {
-		runtime_dir = "/tmp"
-	}
-
-	path_str := fmt.aprintf("%s/modtty-%d.sock", runtime_dir, pid)
-	srv.path = strings.clone_to_cstring(path_str)
-
-	// Open UNIX socket.
-	fd := posix.socket(.UNIX, .STREAM, {})
-	if fd == -1 {
-		free(srv)
-		return nil
-	}
-
-	// Set non-blocking & close-on-exec so child shell doesn't inherit it.
-	flags := posix.fcntl(fd, .GETFL)
-	posix.fcntl(fd, .SETFL, flags | i32(posix.O_NONBLOCK))
-
-	fd_flags := posix.fcntl(fd, .GETFD)
-	posix.fcntl(fd, .SETFD, fd_flags | i32(posix.FD_CLOEXEC))
-
-	posix.unlink(srv.path)
-
-	addr: posix.sockaddr_un
-	addr.sun_family = .UNIX
-	copy(addr.sun_path[:], path_str)
-
-	if posix.bind(fd, cast(^posix.sockaddr)&addr, size_of(addr)) != .OK {
-		posix.close(fd)
-		free(srv)
-		return nil
-	}
-
-	if posix.listen(fd, 8) != .OK {
-		posix.close(fd)
-		free(srv)
-		return nil
-	}
-
-	srv.fd = fd
-	log.debugf("IpcServer init: %v", srv)
-	return srv
 }
 
 // Child process which spawns the shell.
@@ -579,20 +527,9 @@ terminal_free :: proc(term: ^Terminal) {
 		posix.close(term.pty_fd)
 	}
 
-	// TODO: Move to own ipc_destroy.
-	if term.ipc_server != nil {
-		if term.ipc_server.fd != -1 {
-			posix.close(term.ipc_server.fd)
-			term.ipc_server.fd = -1
-		}
-		if term.ipc_server.path != nil {
-			posix.unlink(term.ipc_server.path)
-			delete(term.ipc_server.path)
-			term.ipc_server.path = nil
-		}
-
-		free(term.ipc_server)
-	}
+	ipc_free(term.ipc_server)
+	modeline_free(&term.modeline)
 
 	free(term)
 }
+
