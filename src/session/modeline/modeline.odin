@@ -58,8 +58,8 @@ invoke_modeline_cb :: proc(fn: ^j.JanetFunction, env: ^j.JanetTable, last_exit: 
 
 render_modeline :: proc(
 	ctx: ^r.RenderContext,
-		win_h, win_w: f32,
-		env: ^j.JanetTable,
+	win_h, win_w: f32,
+	env: ^j.JanetTable,
 	modeline: ^Modeline,
 	prefs: ^t.Preferences,
 ) {
@@ -89,7 +89,7 @@ render_modeline :: proc(
 		strings.write_string(&b, sep)
 		strings.write_string(&b, str)
 
-		sep = string(" |")
+		sep = string(" | ")
 	}
 
 
