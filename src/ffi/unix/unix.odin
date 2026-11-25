@@ -1,4 +1,4 @@
-package posix_libc
+package unix
 
 import "core:c"
 import "core:sys/posix"
@@ -13,7 +13,7 @@ when ODIN_OS == .Linux {
 	#panic("Unsupported platform for PTY window resizing")
 }
 
-foreign import plibc "system:c"
+foreign import libc "system:c"
 
 winsize :: struct {
 	ws_row:    c.ushort,
@@ -23,6 +23,6 @@ winsize :: struct {
 }
 
 @(default_calling_convention = "c")
-foreign plibc {
+foreign libc {
 	ioctl :: proc(fd: i32, request: u32, ws: ^winsize) -> i32 ---
 }

@@ -5,12 +5,11 @@ import "core:c"
 // FIXME: No Windows compilation at the moment.
 when ODIN_OS == .Windows {
 		foreign import libjanet {
-				"../../deps/build/janet.lib"
+				"../../../deps/build/janet.lib"
 		}
-		// TODO: Error out...
 } else when ODIN_OS == .Darwin || ODIN_OS == .Linux {
 		foreign import libjanet {
-				"../../deps/build/libjanet.a"
+				"../../../deps/build/libjanet.a"
 		}
 }
 
@@ -140,4 +139,9 @@ janet_ckeywordv :: proc(str: cstring) -> Janet {
 
 janet_cstringv :: proc(str: cstring) -> Janet {
 	return janet_wrap_string(janet_cstring(str))
+}
+
+// Absolute setdyn by directly setting the value in env.
+janet_absolute_setdyn :: proc(env: ^JanetTable, key: cstring, ptr: rawptr) {
+		janet_table_put(env, janet_ckeywordv(key), janet_wrap_pointer(ptr))
 }

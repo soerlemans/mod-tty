@@ -11,11 +11,12 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import j "janet"
-import plibc "posix_libc"
+import scr "scripting"
+import j "ffi/janet"
+import u "ffi/sys_util"
+import vterm "ffi/vterm"
+
 import render "render"
-import u "sys_util"
-import vterm "sys_vterm"
 import tty "tty"
 import t "types"
 
@@ -59,9 +60,9 @@ main :: proc() {
 	prefs := t.default_preferences()
 	defer free(prefs)
 
-	// Initialize Janet VM, and load configuration.
-	j.init_scripting(prefs)
-	defer j.janet_deinit()
+	// Initialize scripting backend.
+	scr.init_scripting(prefs)
+	defer scr.deinit_scripting()
 
 	// For now we pick 800x600 as default size.
 	win_w := i32(800)

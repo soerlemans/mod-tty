@@ -13,11 +13,9 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import j "../janet"
-import plibc "../posix_libc"
+import j "../ffi/janet"
+
 import render "../render"
-import u "../sys_util"
-import vterm "../sys_vterm"
 import t "../types"
 
 Modeline :: struct {

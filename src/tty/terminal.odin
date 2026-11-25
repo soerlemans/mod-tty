@@ -13,11 +13,12 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import j "../janet"
-import plibc "../posix_libc"
+import j "../ffi/janet"
+import unix "../ffi/unix"
+import u "../ffi/sys_util"
+import vterm "../ffi/vterm"
+
 import render "../render"
-import u "../sys_util"
-import vterm "../sys_vterm"
 import t "../types"
 
 READ_BUF_SIZE :: 4096
@@ -319,13 +320,13 @@ resize_terminal :: proc(term: ^Terminal, win_w, win_h, font_w, font_h: f32, pref
 	vterm.vterm_set_size(term.vt, c.int(rows), c.int(cols))
 
 	// Notify the kernel PTY of the new dimensions.
-	ws := plibc.winsize {
+	ws := unix.winsize {
 		ws_row    = u16(rows),
 		ws_col    = u16(cols),
 		ws_xpixel = u16(win_w),
 		ws_ypixel = u16(win_h),
 	}
-	plibc.ioctl(i32(term.pty_fd), plibc.TIOCSWINSZ, &ws)
+	unix.ioctl(i32(term.pty_fd), unix.TIOCSWINSZ, &ws)
 }
 
 

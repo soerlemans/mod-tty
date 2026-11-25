@@ -5,12 +5,12 @@ import "core:c"
 when ODIN_OS == .Linux || ODIN_OS == .Darwin {
 		foreign import libvterm {
 				// Prefer locally built libvterm as it comes with debug symbols.
-				"../../deps/build/_deps/vterm-src/.libs/libvterm.a",
+				"../../../deps/build/_deps/vterm-src/.libs/libvterm.a",
 				"system:vterm"
 		}
 } else when ODIN_OS == .Windows {
 		foreign import libvterm {
-				"vterm.lib"
+				"../../../deps/build/_deps/vterm-src/.libs/vterm.lib",
 		}
 }
 
