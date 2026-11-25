@@ -7,7 +7,8 @@ import "core:strings"
 
 import j "../ffi/janet"
 
-import ml "../tty/modeline"
+import s "../session"
+import ml "../session/modeline"
 import t "../types"
 
 @(private)
@@ -46,7 +47,7 @@ eval_file :: proc(env: ^j.JanetTable, path: string, allocator := context.allocat
 // TODO: Also inject terminal into the environment and manipulate it.
 // If any of these fail just kill the program.
 // Initialize Janet VM, and load configuration.
-init_scripting :: proc(prefs: ^t.Preferences, modeline: ^ml.Modeline) -> ^j.JanetTable {
+init_scripting :: proc(sesh: ^s.Session) -> ^j.JanetTable {
 	// Propagate context to C exposed functions.
 	capture_rt_context()
 
@@ -67,8 +68,8 @@ init_scripting :: proc(prefs: ^t.Preferences, modeline: ^ml.Modeline) -> ^j.Jane
 	j.janet_gcroot(j.janet_wrap_table(env))
 
 	// Register globals in environment.
-	j.janet_absolute_setdyn(env, "preferences", rawptr(prefs))
-	j.janet_absolute_setdyn(env, "modeline-callbacks", rawptr(&modeline.callbacks))
+	j.janet_absolute_setdyn(env, "preferences", rawptr(sesh.prefs))
+	j.janet_absolute_setdyn(env, "modeline-callbacks", rawptr(&sesh.modeline.callbacks))
 
 	register_cfuns(env)
 

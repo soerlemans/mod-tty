@@ -7,7 +7,7 @@ import "core:log"
 
 import j "../ffi/janet"
 
-import ml "../tty/modeline"
+import ml "../session/modeline"
 import t "../types"
 
 // Obtain preferences pointer from dynamic binding.
@@ -62,6 +62,9 @@ cfun_register_modeline_cb :: proc "c" (argc: i32, argv: [^]j.Janet) -> j.Janet {
 	prio := j.janet_unwrap_integer(argv[0])
 	func := j.janet_unwrap_function(argv[1])
 
+	// Pin so it does not reallocate.
+	j.janet_gcroot(j.janet_wrap_function(func))
+
 	modeline := obtain_modeline()
 
 	append(&modeline.callbacks, func)
@@ -77,8 +80,8 @@ register_cfuns :: proc(env: ^j.JanetTable) {
 	fn_val = j.janet_wrap_cfunction(cfun_register_modeline_cb)
 	j.janet_def(
 		env,
-		"set-modeline-cb",
+		"register-modeline-cb",
 		fn_val,
-		"(set-modeline-cb n)\n\nRegister a modeline callback.",
+		"(register-modeline-cb priority lambda)\n\nRegister a modeline callback.",
 	)
 }

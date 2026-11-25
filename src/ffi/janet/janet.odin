@@ -22,7 +22,6 @@ JanetCFunction :: #type proc "c" (argc: i32, argv: [^]Janet) -> Janet
 // TODO: Define fully.
 JanetTable :: struct {}
 JanetFunction :: struct {}
-JanetFiber :: struct {}
 JanetEvalFlags :: c.int
 
 /* All possible types */
@@ -65,12 +64,58 @@ JanetSignal :: enum c.int {
     JANET_SIGNAL_EVENT = JANET_SIGNAL_USER9,
 }
 
+JanetFiberStatus :: enum c.int {
+    JANET_STATUS_DEAD,
+    JANET_STATUS_ERROR,
+    JANET_STATUS_DEBUG,
+    JANET_STATUS_PENDING,
+    JANET_STATUS_USER0,
+    JANET_STATUS_USER1,
+    JANET_STATUS_USER2,
+    JANET_STATUS_USER3,
+    JANET_STATUS_USER4,
+    JANET_STATUS_USER5,
+    JANET_STATUS_USER6,
+    JANET_STATUS_USER7,
+    JANET_STATUS_USER8,
+    JANET_STATUS_USER9,
+    JANET_STATUS_NEW,
+    JANET_STATUS_ALIVE
+}
+
+// TODO: REFCOUNT UT SIZE DIFFERS PER PLATFORM WE NEED TO ACCOUNT FOR THIS LATER.
+JanetGCObjectData :: struct #raw_union {
+		next: ^JanetGCObject,
+    refcount: i32, // For threaded abstract types.
+}
+
+JanetGCObject :: struct {
+    flags: i32,
+		data: JanetGCObjectData
+}
+
+JanetFiber :: struct {
+		gc: JanetGCObject, // GC Object stuff.
+    flags: i32, // More flags.
+    frame: i32, // Index of the stack frame.
+    stackstart: i32, // Beginning of next args.
+    stacktop: i32, // Top of stack. Where values are pushed and popped from.
+    capacity: i32, // How big is the stack memory.
+    maxstack: i32, // Arbitrary defined limit for stack overflow.
+    env: ^JanetTable, // Dynamic bindings table (usually current environment).
+    data: ^Janet, // Dynamically resized stack memory.
+    child: ^JanetFiber, // Keep linked list of fibers for restarting pending fibers.
+		last_value: Janet, // Last returned value from a fiber.
+}
+
 @(default_calling_convention = "c")
 foreign libjanet {
 	// Janet VM:
 	janet_init :: proc "c" () -> c.int ---
 	janet_deinit :: proc "c" () ---
 	janet_core_env :: proc "c" (replacements: rawptr) -> ^JanetTable ---
+	janet_continue :: proc(fiber: ^JanetFiber, input: Janet, output: ^Janet) -> JanetSignal ---
+
 
 	// Call a function.
 	janet_pcall :: proc(fun: ^JanetFunction, argn: i32, argv: ^Janet, out: ^Janet, f: ^^JanetFiber) -> JanetSignal ---
@@ -87,7 +132,14 @@ foreign libjanet {
 	janet_gcunroot :: proc "c" (root: Janet) -> c.int ---
 
 	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
-	janet_table_put :: proc "c" (t: ^JanetTable, key: Janet, val: Janet) ---
+		janet_table_put :: proc "c" (t: ^JanetTable, key: Janet, val: Janet) ---
+
+	janet_fiber :: proc "c"(callee: ^JanetFunction, capacity: i32, argc: i32, argv: ^Janet) -> ^JanetFiber ---
+	janet_fiber_reset :: proc "c"(fiber: ^JanetFiber, callee: ^JanetFunction, argc: i32, argv: ^Janet) -> ^JanetFiber ---
+	janet_fiber_status :: proc "c"(fiber: ^JanetFiber) -> JanetFiberStatus ---
+	janet_fiber_can_resume :: proc "c"(fiber: ^JanetFiber) -> c.int ---
+	janet_current_fiber :: proc "c"() -> ^JanetFiber ---
+	janet_root_fiber :: proc "c"() -> ^JanetFiber ---
 
 	janet_setdyn :: proc "c" (name: cstring, val: Janet) ---
 	janet_dyn :: proc "c" (name: cstring) -> Janet ---
@@ -119,6 +171,7 @@ foreign libjanet {
 	janet_unwrap_integer :: proc "c" (x: Janet) -> i32 ---
 	janet_unwrap_number :: proc "c" (x: Janet) -> f64 ---
 	janet_unwrap_table :: proc "c" (x: Janet) -> ^JanetTable ---
+	janet_unwrap_string :: proc "c" (x: Janet) -> cstring ---
 	janet_unwrap_function :: proc "c" (x: Janet) -> ^JanetFunction ---
 	janet_unwrap_pointer :: proc "c" (x: Janet) -> rawptr ---
 

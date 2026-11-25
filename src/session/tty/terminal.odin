@@ -13,14 +13,13 @@ import "core:sys/posix"
 import sdl "vendor:sdl3"
 import ttf "vendor:sdl3/ttf"
 
-import j "../ffi/janet"
-import u "../ffi/sys_util"
-import unix "../ffi/unix"
-import vterm "../ffi/vterm"
+import j "../../ffi/janet"
+import u "../../ffi/sys_util"
+import unix "../../ffi/unix"
+import vterm "../../ffi/vterm"
 
-import render "../render"
-import t "../types"
-import ml "modeline"
+import render "../../render"
+import t "../../types"
 
 READ_BUF_SIZE :: 4096
 

@@ -17,8 +17,9 @@ import vterm "ffi/vterm"
 import scr "scripting"
 
 import render "render"
-import tty "tty"
-import ml "tty/modeline"
+import s "session"
+import ml "session/modeline"
+import tty "session/tty"
 import t "types"
 
 FpsContext :: struct {
@@ -57,17 +58,16 @@ main :: proc() {
 
 	log.debug("DEBUG logging enabled!")
 
+	// TODO: Move session init and destruction into a single place.
+	sesh: s.Session
+
 	// Set preferences to defaults.
-	prefs := t.default_preferences()
-	defer free(prefs)
+	sesh.prefs = t.default_preferences()
+	defer free(sesh.prefs)
 
 	// Initialize modeline.
-	modeline := ml.modeline_init()
-	defer ml.modeline_free(modeline)
-
-	// Initialize scripting backend.
-	scr.init_scripting(prefs, modeline)
-	defer scr.deinit_scripting()
+	sesh.modeline = ml.modeline_init()
+	defer ml.modeline_free(sesh.modeline)
 
 	// For now we pick 800x600 as default size.
 	win_w := i32(800)
@@ -76,12 +76,17 @@ main :: proc() {
 
 	// Libvterm setup
 	cols, rows: i32 = 80, 24 // Defaults.
-	terminal, state := tty.terminal_init(rows, cols)
+	state: tty.TerminalStatus
+	sesh.term, state = tty.terminal_init(rows, cols)
 	if state != .OK {
 		fmt.println("Failed to init Terminal!")
 		return
 	}
-	defer tty.terminal_free(terminal)
+	defer tty.terminal_free(sesh.term)
+
+	// Initialize scripting backend.
+	sesh.env = scr.init_scripting(&sesh)
+	defer scr.deinit_scripting()
 
 	// SDL3 init.
 	if !sdl.Init({.VIDEO}) {
@@ -97,10 +102,10 @@ main :: proc() {
 	defer ttf.Quit()
 
 	// Load font.
-	font := render.load_font(prefs)
+	font := render.load_font(sesh.prefs)
 	defer ttf.CloseFont(font)
 
-	window := sdl.CreateWindow(prefs.title, win_w, win_h, {.RESIZABLE})
+	window := sdl.CreateWindow(sesh.prefs.title, win_w, win_h, {.RESIZABLE})
 	if window == nil do return
 	defer sdl.DestroyWindow(window)
 
@@ -127,7 +132,7 @@ main :: proc() {
 		update_fps(&fps_ctx)
 
 		// Poll if there is new input from PTY.
-		if tty.poll_terminal(terminal) != .OK {
+		if tty.poll_terminal(sesh.term) != .OK {
 			fmt.println("Polling error")
 			break
 		}
@@ -162,61 +167,61 @@ main :: proc() {
 				switch event.key.key {
 				// TODO: Clean up.
 				case sdl.K_RETURN:
-					vterm.vterm_keyboard_key(terminal.vt, .ENTER, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .ENTER, kmod)
 
 				case sdl.K_BACKSPACE:
-					vterm.vterm_keyboard_key(terminal.vt, .BACKSPACE, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .BACKSPACE, kmod)
 
 				case sdl.K_TAB:
-					vterm.vterm_keyboard_key(terminal.vt, .TAB, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .TAB, kmod)
 
 				case sdl.K_ESCAPE:
-					vterm.vterm_keyboard_key(terminal.vt, .ESCAPE, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .ESCAPE, kmod)
 
 				case sdl.K_UP:
-					vterm.vterm_keyboard_key(terminal.vt, .UP, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .UP, kmod)
 
 				case sdl.K_DOWN:
-					vterm.vterm_keyboard_key(terminal.vt, .DOWN, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .DOWN, kmod)
 
 				case sdl.K_LEFT:
-					vterm.vterm_keyboard_key(terminal.vt, .LEFT, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .LEFT, kmod)
 
 				case sdl.K_RIGHT:
-					vterm.vterm_keyboard_key(terminal.vt, .RIGHT, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .RIGHT, kmod)
 
 				case sdl.K_INSERT:
-					vterm.vterm_keyboard_key(terminal.vt, .INS, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .INS, kmod)
 
 				case sdl.K_DELETE:
-					vterm.vterm_keyboard_key(terminal.vt, .DEL, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .DEL, kmod)
 
 				case sdl.K_HOME:
-					vterm.vterm_keyboard_key(terminal.vt, .HOME, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .HOME, kmod)
 
 				case sdl.K_END:
-					vterm.vterm_keyboard_key(terminal.vt, .END, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .END, kmod)
 
 				case sdl.K_PAGEUP:
-					vterm.vterm_keyboard_key(terminal.vt, .PAGEUP, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .PAGEUP, kmod)
 
 				case sdl.K_PAGEDOWN:
-					vterm.vterm_keyboard_key(terminal.vt, .PAGEDOWN, kmod)
+					vterm.vterm_keyboard_key(sesh.term.vt, .PAGEDOWN, kmod)
 
 				case:
 					// Ignore empty modifiers and if only a shift is present.
 					// As we have capitalization be handled by .TEXT_INPUT case.
 					if kmod != .NONE && (kmod & (.SHIFT)) == .NONE {
 						// SDL Keytypes map to ASCII table.
-						vterm.vterm_keyboard_unichar(terminal.vt, u32(event.key.key), kmod)
-						terminal.dirty = true
+						vterm.vterm_keyboard_unichar(sesh.term.vt, u32(event.key.key), kmod)
+						sesh.term.dirty = true
 					}
 				}
 
 			case .TEXT_INPUT:
 				text_ptr := event.text.text
 				for r in string(text_ptr) {
-					vterm.vterm_keyboard_unichar(terminal.vt, u32(r), .NONE)
+					vterm.vterm_keyboard_unichar(sesh.term.vt, u32(r), .NONE)
 				}
 
 			case .WINDOW_RESIZED:
@@ -225,29 +230,30 @@ main :: proc() {
 
 				// TODO: Update PTY and LIBVTERM.
 				tty.resize_terminal(
-					terminal,
+					sesh.term,
 					f32(win_w),
 					f32(win_h),
 					f32(render.font_w),
 					f32(render.font_h),
-					prefs,
+					sesh.prefs,
 				)
-				terminal.dirty = true
+				sesh.term.dirty = true
 			}
 		}
 
 		sdl.SetRenderDrawColor(
 			renderer,
-			prefs.bg_color.r,
-			prefs.bg_color.g,
-			prefs.bg_color.b,
-			prefs.bg_color.a,
+			sesh.prefs.bg_color.r,
+			sesh.prefs.bg_color.g,
+			sesh.prefs.bg_color.b,
+			sesh.prefs.bg_color.a,
 		)
 		sdl.RenderClear(renderer)
 
-		tty.render_terminal(terminal, &ctx, prefs)
-		render.render_spacer_bar(&ctx, f32(win_h), f32(win_w), prefs, fps_ctx.fps)
+		tty.render_terminal(sesh.term, &ctx, sesh.prefs)
+		ml.render_modeline(&ctx, f32(win_h), f32(win_w), sesh.env, sesh.modeline, sesh.prefs)
 
 		sdl.RenderPresent(renderer)
+		free_all(context.temp_allocator)
 	}
 }

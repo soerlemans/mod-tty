@@ -44,24 +44,3 @@ render_string :: proc(ctx: ^RenderContext, text: string, col, row: f32, color: s
 
 	render_text_string(ctx, text, x, y, color)
 }
-
-render_spacer_bar :: proc(ctx: ^RenderContext, win_h, win_w: f32, pref: ^t.Preferences, fps: f32) {
-	// Diagnostic spacer bar.
-	spacer_rect := sdl.FRect{0, f32(win_h) - pref.spacer_height, f32(win_w), pref.spacer_height}
-	sdl.SetRenderDrawColor(
-		ctx.renderer,
-		pref.spacer_bg.r,
-		pref.spacer_bg.g,
-		pref.spacer_bg.b,
-		pref.spacer_bg.a,
-	)
-	sdl.RenderFillRect(ctx.renderer, &spacer_rect)
-
-	y := f32(win_h - 18) / f32(font_h)
-	diag_text := fmt.tprintf(
-		"FPS: %.1f | Spacer: %.0fpix | Status: Active",
-		fps,
-		pref.spacer_height,
-	)
-	render_string(ctx, diag_text, 1, y, pref.spacer_fg)
-}
