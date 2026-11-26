@@ -7,6 +7,7 @@ import "core:fmt"
 import "core:log"
 import "core:os"
 import "core:slice"
+import "core:sort"
 import "core:strings"
 import "core:sys/posix"
 
@@ -17,22 +18,80 @@ import j "../../ffi/janet"
 import r "../../render"
 import t "../../types"
 
+PROPS_DEFAULT_PRIORITY :: 200
+PROPS_PRIORITY :: "priority"
+PROPS_VISIBLE :: "visible"
+PROPS_INTERVAL_MS :: "visible"
+
+// TODO: Decide if this is needed.
+ModelineCellKind :: enum {
+	STATUS,
+	ANIMATION,
+}
+
+ModelineCell :: struct {
+	callback:   ^j.JanetFunction, // Callback returning string.
+	props:      ^j.JanetTable, // Property table to access and modify from callback.
+}
+
 Modeline :: struct {
-	callbacks: [dynamic]^j.JanetFunction,
+	callbacks: [dynamic]ModelineCell,
+}
+
+cell_props_priority :: proc(cell: ^ModelineCell) -> i32 {
+	key := j.janet_keyword(PROPS_PRIORITY)
+
+	val := j.janet_table_get(cell.props, key)
+	if !j.janet_istype(val, .JANET_NUMBER) {
+			return PROPS_DEFAULT_PRIORITY
+	}
+
+	num := i32(j.janet_unwrap_integer(val))
+	if num < 0 {
+			num = 0
+	}
+	return num
+}
+
+cell_props_visibility :: proc(cell: ^ModelineCell) -> bool {
+	key := j.janet_keyword(PROPS_VISIBLE)
+
+	val := j.janet_table_get(cell.props, key)
+	if j.janet_istype(val, .JANET_BOOLEAN) {
+		return true
+	}
+
+	// TODO: Introduce helpers for unwrapping boilerplate.
+	return j.janet_unwrap_boolean(val) != 0
+}
+
+cell_props_interval_ms :: proc(cell: ^ModelineCell) -> i32 {
+	key := j.janet_keyword(PROPS_PRIORITY)
+
+	val := j.janet_table_get(cell.props, key)
+		if j.janet_istype(val, .JANET_NUMBER) {
+				return PROPS_DEFAULT_PRIORITY
+		}
+
+		num := i32(j.janet_unwrap_integer(val))
+		if num < 0 {
+				num = 0
+		}
+	return num
 }
 
 modeline_init :: proc() -> ^Modeline {
 	modeline := new(Modeline)
-	modeline.callbacks = make([dynamic]^j.JanetFunction, 0, 16)
+	modeline.callbacks = make([dynamic]ModelineCell, 0, 16)
 
 	return modeline
 }
 
-invoke_modeline_cb :: proc(fn: ^j.JanetFunction, env: ^j.JanetTable, last_exit: i32) -> string {
+invoke_modeline_cb :: proc(env: ^j.JanetTable, cell: ModelineCell, last_exit: i32) -> string {
 	j_exit := j.janet_wrap_integer(last_exit)
 	args := [1]j.Janet{j_exit}
 
-	fiber := j.janet_fiber(fn, 64, 1, &args[0])
+	fiber := j.janet_fiber(cell.callback, 64, 1, &args[0])
 	if fiber == nil {
 		log.errorf("Failed to allocate Janet fiber for modeline callback!")
 		return ""
@@ -46,7 +105,7 @@ invoke_modeline_cb :: proc(fn: ^j.JanetFunction, env: ^j.JanetTable, last_exit: 
 		return ""
 	}
 
-	if j.janet_checktype(result, .JANET_STRING) != 0 {
+	if j.janet_istype(result, .JANET_STRING) {
 		raw_str := string(j.janet_unwrap_string(result))
 		return strings.clone(raw_str, context.temp_allocator)
 	} else {
@@ -78,20 +137,28 @@ render_modeline :: proc(
 
 	b, err := strings.builder_make()
 	if err != nil {
-		// TODO:.....
+		log.errorf("Cant allocate strings builder.")
+		return
 	}
 	defer strings.builder_destroy(&b)
 
+	// Higher priority items should be on the left on the modeline.
+	slice.sort_by(modeline.callbacks[:], proc(lhs, rhs: ^ModelineCell) -> bool {
+		return cell_props_priority(lhs) > cell_props_priority(rhs)
+	})
+
 	sep := string("")
-	for cb in modeline.callbacks {
-		str := invoke_modeline_cb(cb, env, 0)
+	for cell in modeline.callbacks {
+		str := invoke_modeline_cb(env, cell, 0)
+		if len(str) == 0 {
+			continue
+		}
 
 		strings.write_string(&b, sep)
 		strings.write_string(&b, str)
 
 		sep = string(" | ")
 	}
-
 
 	ml_text := strings.to_string(b)
 	r.render_string(ctx, ml_text, 1, y, prefs.spacer_fg)

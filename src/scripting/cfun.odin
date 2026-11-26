@@ -33,7 +33,6 @@ obtain_modeline :: proc() -> ^ml.Modeline {
 	return (^ml.Modeline)(j.janet_unwrap_pointer(val))
 }
 
-
 // Odin function binding (set-font-size <size>).
 cfun_set_font_size :: proc "c" (argc: i32, argv: [^]j.Janet) -> j.Janet {
 	context = g_ctx
@@ -52,22 +51,38 @@ cfun_set_font_size :: proc "c" (argc: i32, argv: [^]j.Janet) -> j.Janet {
 }
 
 
-// Odin function binding (register-modeline-cb <priority> <func>).
+// Odin function binding (register-modeline-cb <func> <optional>).
 // Register a modeline callback.
 // TODO: Actually do something with priority.
 cfun_register_modeline_cb :: proc "c" (argc: i32, argv: [^]j.Janet) -> j.Janet {
 	context = g_ctx
-	j.janet_fixarity(argc, 2)
+	j.janet_arity(argc, 1, 2)
 
-	prio := j.janet_unwrap_integer(argv[0])
-	func := j.janet_unwrap_function(argv[1])
+	if j.janet_checktype(argv[0], .JANET_FUNCTION) != 0 {
+		j.janet_panic("First argument to register-modeline-cb must be a function.")
+	}
 
-	// Pin so it does not reallocate.
+	// Optional argument checking.
+	if (argc == 2) {
+		if j.janet_checktype(argv[1], .JANET_TABLE) != 0 {
+			j.janet_panic(
+				"Second optional argument to register-modeline-cb must be a janet table.",
+			)
+		}
+	}
+
+	func := j.janet_unwrap_function(argv[0])
+	initial_props := j.janet_unwrap_table(argv[1])
+
+	// Pin so the objects wont be moved around.
 	j.janet_gcroot(j.janet_wrap_function(func))
+	j.janet_gcroot(j.janet_wrap_table(initial_props))
 
 	modeline := obtain_modeline()
 
-	append(&modeline.callbacks, func)
+	cell := ml.ModelineCell{func, initial_props}
+
+	append(&modeline.callbacks, cell)
 
 	return j.janet_wrap_nil()
 }

@@ -15,6 +15,10 @@ when ODIN_OS == .Windows {
 
 // Janet's primary 64-bit tagged value type.
 Janet :: u64
+JanetString :: cstring
+JanetSymbol :: cstring
+JanetKeyword :: cstring
+JanetTuple :: []^Janet
 
 JanetCFunction :: #type proc "c" (argc: i32, argv: [^]Janet) -> Janet
 
@@ -131,9 +135,6 @@ foreign libjanet {
 	janet_gcroot :: proc "c" (root: Janet) ---
 	janet_gcunroot :: proc "c" (root: Janet) -> c.int ---
 
-	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
-		janet_table_put :: proc "c" (t: ^JanetTable, key: Janet, val: Janet) ---
-
 	janet_fiber :: proc "c"(callee: ^JanetFunction, capacity: i32, argc: i32, argv: ^Janet) -> ^JanetFiber ---
 	janet_fiber_reset :: proc "c"(fiber: ^JanetFiber, callee: ^JanetFunction, argc: i32, argv: ^Janet) -> ^JanetFiber ---
 	janet_fiber_status :: proc "c"(fiber: ^JanetFiber) -> JanetFiberStatus ---
@@ -149,9 +150,18 @@ foreign libjanet {
 	janet_dobytes :: proc "c" (env: ^JanetTable, str: ^u8, len: i32, sourcePath: cstring, out: ^Janet) -> c.int ---
 	janet_dostring :: proc "c" (env: ^JanetTable, str: cstring, sourcePath: cstring, out: ^Janet) -> c.int ---
 
+	// String:
+	janet_string :: proc "c" (buf: cstring, len: i32) -> JanetString ---
+
 	// C types:
+	janet_symbol :: proc "c" (str: cstring, len: i32) -> rawptr ---
 	janet_csymbol :: proc "c" (str: cstring) -> rawptr ---
 	janet_cstring :: proc "c" (str: cstring) -> ^u8 ---
+
+	// Table
+	janet_table :: proc "c" (cap: i32) -> ^JanetTable ---
+	janet_table_get :: proc "c" (t: ^JanetTable, key: Janet) -> Janet ---
+	janet_table_put :: proc "c" (t: ^JanetTable, key: Janet, val: Janet) ---
 
 	// Wrap:
 	janet_wrap_nil :: proc "c" () -> Janet ---
@@ -159,8 +169,8 @@ foreign libjanet {
 	janet_wrap_true :: proc "c" () -> Janet ---
 	janet_wrap_false :: proc "c" () -> Janet ---
 	janet_wrap_boolean :: proc "c" (val: c.bool) -> Janet ---
-	janet_wrap_string :: proc "c" (s: ^u8) -> Janet ---
-	janet_wrap_keyword :: proc "c" (sym: rawptr) -> Janet ---
+	janet_wrap_string :: proc "c" (s: JanetString) -> Janet ---
+	janet_wrap_keyword :: proc "c" (sym: JanetKeyword) -> Janet ---
   janet_wrap_function :: proc "c" (fn: ^JanetFunction) -> Janet ---
   janet_wrap_cfunction :: proc "c" (fn: JanetCFunction) -> Janet ---
 	janet_wrap_table :: proc "c" (x: ^JanetTable) -> Janet ---
@@ -171,9 +181,10 @@ foreign libjanet {
 	janet_unwrap_integer :: proc "c" (x: Janet) -> i32 ---
 	janet_unwrap_number :: proc "c" (x: Janet) -> f64 ---
 	janet_unwrap_table :: proc "c" (x: Janet) -> ^JanetTable ---
-	janet_unwrap_string :: proc "c" (x: Janet) -> cstring ---
+	janet_unwrap_string :: proc "c" (x: Janet) -> JanetString ---
 	janet_unwrap_function :: proc "c" (x: Janet) -> ^JanetFunction ---
 	janet_unwrap_pointer :: proc "c" (x: Janet) -> rawptr ---
+	janet_unwrap_boolean :: proc "c" (x: Janet) -> c.int ---
 
 	janet_arity :: proc "c" (arity: i32, min: i32, max: i32) ---
 	janet_fixarity :: proc "c" (arity: i32, fix: i32) ---
@@ -181,6 +192,13 @@ foreign libjanet {
 	// Error:
   janet_panic         :: proc "c" (format: cstring) ---
   janet_panicf         :: proc "c" (format: cstring, #c_vararg args: ..any) ---
+}
+
+// Janet helpers.
+
+janet_keyword :: proc(str: string) -> Janet {
+	sym := janet_symbol(cstring(str), len(str))
+	return janet_wrap_keyword(sym)
 }
 
 // Re-implement the janet_ckeywordv macro cleanly in Odin:
@@ -197,4 +215,31 @@ janet_cstringv :: proc(str: cstring) -> Janet {
 // Absolute setdyn by directly setting the value in env.
 janet_absolute_setdyn :: proc(env: ^JanetTable, key: cstring, ptr: rawptr) {
 		janet_table_put(env, janet_ckeywordv(key), janet_wrap_pointer(ptr))
+}
+
+// TODO: Move the helpers somewhere logical?
+// Table utility functions.
+janet_set_table_bool :: proc(tbl: ^j.JanetTable, key: string, val: bool) {
+	j_key := janet_wrap_keyword(janet_keyword(raw_data(key), i32(len(key))))
+	j_val := janet_wrap_boolean(raw_data(val))
+
+	janet_table_put(tbl, j_key, j_val)
+}
+
+janet_set_table_i32 :: proc(tbl: ^j.JanetTable, key: string, val: i32) {
+	j_key := janet_wrap_keyword(janet_keyword(raw_data(key), i32(len(key))))
+	j_val := janet_wrap_integer(raw_data(val))
+
+	janet_table_put(tbl, j_key, j_val)
+}
+
+janet_set_table_str :: proc(tbl: ^j.JanetTable, key: string, val: string) {
+		j_key := janet_wrap_keyword(janet_keyword(raw_data(key), i32(len(key))))
+		j_val := janet_wrap_string(janet_string(raw_data(val), i32(len(val))))
+
+		janet_table_put(tbl, j_key, j_val)
+}
+
+janet_istype :: proc(x: Janet, type: JanetType ) -> bool {
+		return janet_checktype(x, type) == 0
 }
